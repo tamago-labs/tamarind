@@ -12,10 +12,10 @@
     <name>Tamarind Developers</name>
   </developer>
 
-  <content_rating type="oars-1.1" />
+  <content_rating type="oars-1.1"/>
 
   <url type="homepage">https://github.com/dev-tamarind/tamarind</url>
-  <url type="help">https://github.com/dev-tamarind/tamarind#tamarind-</url>
+  <url type="help">https://github.com/dev-tamarind/tamarind/issues/new/choose</url>
   <url type="bugtracker">https://github.com/dev-tamarind/tamarind/issues</url>
 
   <releases>
@@ -33,7 +33,18 @@
 
   <description>
     <p>Tamarind is a local-first, peer-to-peer collaborative whiteboard. Designed for teams working in network-congested environments like stadiums, concerts, and coffee shops.</p>
+    <ul>
+      <li>Infinite canvas with sticky notes, drawing, and shapes</li>
+      <li>Peer-to-Peer sync via Holepunch Pear (no cloud dependency)</li>
+      <li>Local AI for organizing and summarizing boards (no data leaves the device)</li>
+      <li>Offline-first: keep working when the network drops</li>
+    </ul>
   </description>
 
   <launchable type="desktop-id">io.tamarind.app.desktop</launchable>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/dev-tamarind/tamarind/refs/heads/main/assets/flatpak-screenshot.png</image>
+    </screenshot>
+  </screenshots>
 </component>

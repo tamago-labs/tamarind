@@ -45,7 +45,7 @@ pipe.on('data', async (data) => {
   if (message === 'pear:applyUpdate') {
     await pear.updater.applyUpdate()
     pipe.write('pear:updateApplied')
-    return 
+    return
   }
 
   try {

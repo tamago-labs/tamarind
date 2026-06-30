@@ -1,0 +1,18 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-tamarind-50: #fdf6ec;
+  --color-tamarind-300: #7ee787;
+  --color-tamarind-500: #21c437;
+  --color-tamarind-700: #0e4f15;
+  --color-tamarind-900: #052408;
+  --font-display: 'Inter', system-ui, sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  font-family: var(--font-display);
+}

@@ -1,13 +1,17 @@
-# hello-pear-electron <a name="hello-pear-electron"></a>
+# Tamarind <a name="tamarind"></a>
 
-> Pear Hello World for Electron with `pear-runtime`
+> Local-first P2P collaborative whiteboard built on Electron + `pear-runtime`
 
-End-to-end boilerplate for embedding [pear-runtime][pear-runtime] into [Electron][electron] apps and deploying peer-to-peer application updates.
+Tamarind is a local-first, peer-to-peer collaborative whiteboard. Designed for teams working in network-congested environments (stadiums, concerts, coffee shops), Tamarind keeps working offline and syncs peer-to-peer when the network returns. Built on [Electron][electron] with [pear-runtime][pear-runtime] for P2P distribution and updates.
 
+- Local-first canvas, drawing, and sticky notes
+- Peer-to-Peer sync via Holepunch [Pear][pear-docs] (no cloud)
+- Offline-first by default
 - Peer-to-Peer Over-the-Air updates with update-restart
 - Embedded [bare][bare] runtime workers
-- Application storage management
 - Staged deployment pipeline with multisig production releases
+
+This project is a fork of the [Holepunch `hello-pear-electron` template](https://github.com/holepunchto/hello-pear-electron). See [§Credits](#credits) at the end of this document.
 
 ## Table of Contents
 
@@ -503,7 +507,7 @@ npm run make
 
 Edit `build/AppxManifest.xml` and ensure name, publisher, description, and executable path are correct throughout - some of these are declared in multiple locations.
 
-Install with `Add-AppxPackage .\out\HelloPear-win32-x64\HelloPear.msix`, uninstall with `Get-AppxPackage -Name HelloPear | Remove-AppxPackage`.
+Install with `Add-AppxPackage .\out\Tamarind-win32-x64\Tamarind.msix`, uninstall with `Get-AppxPackage -Name Tamarind | Remove-AppxPackage`.
 
 Production Windows apps must be signed with a code signing certificate. The `Publisher` field in `build/AppxManifest.xml` must match the `CN` of the signing certificate. Supply a `.pfx` certificate file and password with `WINDOWS_CERTIFICATE_FILE` and `WINDOWS_CERTIFICATE_PASSWORD`:
 
@@ -543,7 +547,7 @@ graph BT
 Run `pear build` supplying all supported OS architectures - for example Mac x64 + arm64, Linux x64 + arm64 and Windows x64 would be:
 
 ```sh
-pear build --package=package.json --darwin-arm64-app out/HelloPear-darwin-arm64/HelloPear.app --darwin-x64-app out/HelloPear-darwin-x64/HelloPear.app --linux-arm64-app out/HelloPear-linux-arm64/HelloPear.AppImage --linux-x64-app out/HelloPear-linux-x64/HelloPear.AppImage --win32-x64-app out/HelloPear-win32-x64/HelloPear.msix --target out/build
+pear build --package=package.json --darwin-arm64-app out/Tamarind-darwin-arm64/Tamarind.app --darwin-x64-app out/Tamarind-darwin-x64/Tamarind.app --linux-arm64-app out/Tamarind-linux-arm64/Tamarind.AppImage --linux-x64-app out/Tamarind-linux-x64/Tamarind.AppImage --win32-x64-app out/Tamarind-win32-x64/Tamarind.msix --target out/build
 ```
 
 NOTE: Since building occurs on other machines, they need to be transferred to the build machine first, and then assembled into a Deployment Directory with pear build.
@@ -811,7 +815,7 @@ Create/edit a `pear.json` file and set the `multisig` property to an object with
 {
   "multisig": {
     "publicKeys": ["<pubkey1>", "<pubkey2>", "<pubkey3>"],
-    "namespace": "holepunchto/hello-pear-electron",
+    "namespace": "dev-tamarind/tamarind",
     "quorum": 2
   }
 }
@@ -1031,8 +1035,8 @@ $ git checkout -b my-app-submission -t new-pr
 
 Create these files in the flathub directory:
 
-- metainfo file using the [appstream web form](https://www.freedesktop.org/software/appstream/metainfocreator/#/), like [`com.pears.HelloPear.metainfo.xml`](./flatpak/com.pears.HelloPear.metainfo.xml)
-- Flatpak YAML file, like [`com.pears.HelloPear.yml`](flatpak/com.pears.HelloPear.yml)
+- metainfo file using the [appstream web form](https://www.freedesktop.org/software/appstream/metainfocreator/#/), like [`io.tamarind.app.metainfo.xml`](./flatpak/io.tamarind.app.metainfo.xml)
+- Flatpak YAML file, like [`io.tamarind.app.yml`](flatpak/io.tamarind.app.yml)
 
 #### Testing
 
@@ -1053,8 +1057,8 @@ $ python3 -m http.server --directory out/make/
 In the `flatpak` directory, build and install the Flatpak:
 
 ```sh
-$ flatpak run --command=flathub-build org.flatpak.Builder --disable-rofiles-fuse com.pears.HelloPear.yml
-$ flatpak install --user ./repo com.pears.HelloPear
+$ flatpak run --command=flathub-build org.flatpak.Builder --disable-rofiles-fuse io.tamarind.app.yml
+$ flatpak install --user ./repo io.tamarind.app
 ```
 
 Repeat the build command after making any changes to the manifest.
@@ -1062,14 +1066,14 @@ Repeat the build command after making any changes to the manifest.
 Launch the application from your desktop environment or run it from the CLI:
 
 ```sh
-$ flatpak run com.pears.HelloPear
+$ flatpak run io.tamarind.app
 ```
 
 Uninstall using:
 
 ```sh
-$ flatpak uninstall com.pears.HelloPear
-$ rm -rf ~/.var/app/com.pears.HelloPear
+$ flatpak uninstall io.tamarind.app
+$ rm -rf ~/.var/app/io.tamarind.app
 ```
 
 If the builds take up too much memory, clear these build files from the `flatpak` directory:
@@ -1268,7 +1272,7 @@ Or don't use target at all and always run pear build outside of the app folder:
 pear build ... --package ./my-app/package.json # <-- do this
 ```
 
-That will output a build folder per version e.g. `hello-pear-electron-v1.2.3` creating a deploy folder per deploy. This can be very useful for reviewing any deployment issues and for quickly rolling back to a prior version (i.e. stage -> provision -> multisig from an older build folder).
+That will output a build folder per version e.g. `tamarind-v1.2.3` creating a deploy folder per deploy. This can be very useful for reviewing any deployment issues and for quickly rolling back to a prior version (i.e. stage -> provision -> multisig from an older build folder).
 
 ### `pear multisig commit` errors with `INCOMPATIBLE_SOURCE_AND_TARGET` error
 
@@ -1289,6 +1293,19 @@ Then commit with
 ```sh
 pear multisig commit <touched-link> <request> ...responses
 ```
+
+## Credits <a name="credits"></a>
+
+Tamarind is built on the excellent open-source P2P stack from [Holepunch](https://holepunch.com):
+
+- **[hello-pear-electron](https://github.com/holepunchto/hello-pear-electron)** — the upstream Electron + Pear template that Tamarind is forked from
+- **[pear-runtime](https://github.com/holepunchto/pear-runtime)** — P2P runtime that powers application updates
+- **[bare](https://github.com/holepunchto/bare)** — embedded runtime for background workers
+- **[hypercore](https://github.com/holepunchto/hypercore)** / **[hyperdrive](https://github.com/holepunchto/hyperdrive)** — replicated data structures
+- **[corestore](https://github.com/holepunchto/corestore)** — replication coordination
+- **[hyperswarm](https://github.com/holepunchto/hyperswarm)** — peer discovery
+
+The renderer is built with [React](https://react.dev), [Vite](https://vitejs.dev), [Tailwind CSS](https://tailwindcss.com), [framer-motion](https://www.framer.com/motion/), and [lucide-react](https://lucide.dev).
 
 <!-- Reference Links -->
 

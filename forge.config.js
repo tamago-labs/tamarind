@@ -88,12 +88,12 @@ module.exports = {
       name: 'pear-electron-forge-maker-flatpak',
       platforms: ['linux'],
       config: {
-        appId: 'com.pears.HelloPear',
+        appId: 'com.tamago.tamarind',
         icon: `${packagerConfig.icon}.png`,
         metainfo: 'build/metainfo.xml',
         entrypoint: 'build/entrypoint.sh',
-        comment: 'Integrating Pear into a hello world electron desktop app',
-        categories: ['Development']
+        comment: 'Tamarind - local-first P2P collaborative whiteboard',
+        categories: ['Office', 'Network']
       }
     },
     {
@@ -101,13 +101,13 @@ module.exports = {
       platforms: ['linux'],
       config: {
         snapcraftYamlPath: 'build/snapcraft.yaml',
-        summary: 'Integrating Pear into a hello world electron desktop app',
+        summary: 'Tamarind - local-first P2P collaborative whiteboard',
         description:
-          'End-to-end boilerplate for embedding pear-runtime into Electron apps and deploying peer-to-peer application updates.',
-        contact: 'hello@holepunchto.to',
+          'Tamarind is a local-first, peer-to-peer collaborative whiteboard built on Electron and Pear. Designed for teams working in network-congested environments.',
+        contact: 'hello@dev.tamarind',
         license: 'Apache-2.0',
-        issues: 'https://github.com/holepunchto/hello-pear-electron/issues',
-        website: 'https://github.com/holepunchto/hello-pear-electron',
+        issues: 'https://github.com/dev-tamarind/tamarind/issues',
+        website: 'https://github.com/dev-tamarind/tamarind',
         icon: `${packagerConfig.icon}.png`
       }
     }

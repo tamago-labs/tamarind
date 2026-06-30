@@ -1,3 +1,3 @@
 #!/bin/sh
 
-exec zypak-wrapper.sh /app/lib/${FLATPAK_ID}/HelloPear "$@"
+exec zypak-wrapper.sh /app/lib/${FLATPAK_ID}/Tamarind "$@"
