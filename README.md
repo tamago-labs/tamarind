@@ -1,20 +1,84 @@
 # Tamarind <a name="tamarind"></a>
 
-> Local-first P2P collaborative whiteboard built on Electron + `pear-runtime`
+> Tactical whiteboard for teams that need to win. Works offline, syncs P2P, AI-assisted. Built on Electron + `pear-runtime`.
 
-Tamarind is a local-first, peer-to-peer collaborative whiteboard. Designed for teams working in network-congested environments (stadiums, concerts, coffee shops), Tamarind keeps working offline and syncs peer-to-peer when the network returns. Built on [Electron][electron] with [pear-runtime][pear-runtime] for P2P distribution and updates.
+Internet at stadiums, conference venues, and hackathon halls is terrible. **Tamarind** is the tactical whiteboard that works anyway &mdash; sports teams, sales teams, and hackathon crews plan strategy offline, sync P2P with the rest of the team, and get AI-powered suggestions to sharpen their approach, all without the cloud. Built on [Electron][electron] with [pear-runtime][pear-runtime] for P2P distribution and updates.
 
-- Local-first canvas, drawing, and sticky notes
-- Peer-to-Peer sync via Holepunch [Pear][pear-docs] (no cloud)
-- Offline-first by default
-- Peer-to-Peer Over-the-Air updates with update-restart
-- Embedded [bare][bare] runtime workers
-- Staged deployment pipeline with multisig production releases
+- **Offline-first tactical canvas** &mdash; pick a template that fits the moment: football pitch, sales pipeline, idea board, or blank
+- **P2P team sync** &mdash; Hyperswarm discovery + Autobase multi-writer; everyone on the same network views and edits the same board, syncing directly between devices when they reconnect
+- **Local AI coach** &mdash; on-device tactical analysis: risk rating, weakness detection, and concrete suggestions &mdash; no plans ever leave the device
+- **Immutable decision log** &mdash; every change appended to a Hypercore, giving the team a tamper-evident audit trail for post-game / post-deal / post-hack review
+- **P2P Over-the-Air updates** with update-restart, embedded [bare][bare] runtime workers, multisig production releases
 
 This project is a fork of the [Holepunch `hello-pear-electron` template](https://github.com/holepunchto/hello-pear-electron). See [§Credits](#credits) at the end of this document.
 
+## The Problem <a name="the-problem"></a>
+
+Stadium WiFi collapses under 50,000 devices. Conference WiFi requires a password the speaker doesn't have. Hackathon venues throttle the moment demos start. **The teams that need to plan together the most are the ones stuck with the worst network.** Tamarind is built for the moment the network is gone.
+
+## What Tamarind Does <a name="what-tamarind-does"></a>
+
+- **Tactical canvas.** Pick a template &mdash; football pitch (11v11, 7v7, futsal, training grid), sales pipeline, hackathon idea board, or blank &mdash; and start marking up. Drag, draw, annotate. Everything is local-first; the canvas never blocks on a network call.
+- **Team P2P sync.** Open the same board on a second device, they pair over Hyperswarm, and every edit replicates live through Autobase. No accounts, no servers, no invite links &mdash; just two devices on the same network.
+- **Local AI coach.** Hit "Analyze" and an on-device model reads the current plan, scores its risk, points out structural weaknesses, and suggests concrete adjustments. Plan data never leaves the laptop.
+- **Decision log.** Each change is appended to a Hypercore, so the team can scrub through every adjustment made during the session for retrospective review.
+
+## Who It&apos;s For <a name="who-its-for"></a>
+
+Tamarind is for any team that plans strategy under pressure and bad connectivity. The tactics change, the tactical whiteboard doesn&apos;t:
+
+- **Sports teams** &mdash; win the game. Coaches sketch set-pieces on the pitch, sync tactics with their staff across the stadium, and call on a local AI for a second opinion &mdash; all without depending on the venue WiFi.
+- **Sales teams** &mdash; win the deal. AEs, SEs, and solution architects map the buyer, sketch the deal plan, log every call, and walk into the next meeting with a shared tactical board.
+- **Hackathon crews** &mdash; win the competition. Throw ideas on the board, vote on which to build, split work, and finalize the demo flow before the buzzer.
+- **Beyond** &mdash; any group that needs to think together on a shared surface benefits from offline-first, sync-on-reconnect collaboration.
+
+## The Vision &mdash; Phantom Coach <a name="phantom-coach"></a>
+
+> _Our long-term vision: a "Phantom Coach" that watches a match video and auto-populates the board with player movements, then delivers real-time voice feedback. Elite-level tactical analysis, accessible from a local youth club to a World Cup squad._
+
+- A computer-vision engine consumes match video and projects player positions onto the canvas in real time.
+- A local LLM (Ollama) becomes a voice-driven assistant: _"shift the right-back two meters up, they&apos;re overloading your left"_.
+- All inference stays on-device &mdash; no footage, no telemetry, no cloud round-trips.
+
+## Roadmap <a name="roadmap"></a>
+
+**Shipped (v1.0.0)**
+
+- Electron + Pear runtime shell with P2P-ready build pipeline
+- Tamarind-branded React/TypeScript renderer (Vite + Tailwind v4 + framer-motion + lucide-react)
+- Splash screen and canvas-page placeholder; background `pear-runtime` worker boots on launch
+- Multisig release channel scaffolded (`dev.tamarind/tamarind`)
+- Companion landing page (`tamarind-landing/`) — React + Vite + Tailwind v4
+
+**Sprint 1 &mdash; Tactical canvas**
+
+- Templates: football pitch (11v11, 7v7, futsal, training grid), sales pipeline, hackathon idea board, blank
+- Draggable tokens, drawing tools, annotation markers
+- Local persistence (SQLite via `better-sqlite3`)
+
+**Sprint 2 &mdash; Team P2P**
+
+- Autobase-backed board state; multi-writer CRDT
+- Hyperswarm pairing flow (room code or proximity)
+- Live cursor + selection presence
+
+**Sprint 3 &mdash; Local AI coach**
+
+- Rule-based weakness / risk analyzer (MVP)
+- Ollama-backed chat for explanations and play suggestions
+
+**Sprint 4 &mdash; Phantom Coach (vision + voice)**
+
+- Match-video ingestion; CV pipeline &rarr; board population
+- Real-time voice feedback (local TTS)
+
 ## Table of Contents
 
+- [The Problem](#the-problem)
+- [What Tamarind Does](#what-tamarind-does)
+- [Who It's For](#who-its-for)
+- [The Vision — Phantom Coach](#phantom-coach)
+- [Roadmap](#roadmap)
 - [OS Support](#os-support)
 - [Requirements](#requirements)
 - [Terminology](#terminology)
@@ -72,6 +136,19 @@ This project is a fork of the [Holepunch `hello-pear-electron` template](https:/
 - **seeding** - exposing a drive to peers for discovery and download
 - **vendor signing** - signing distributables with OS-level certificates so they run on other machines without quarantine e.g. Apple notarization, Windows code signing
 - **versioned link** - a pear link of the form `pear://<fork>.<length>.<key>` where fork, length and key correspond to [core.fork][hypercore-fork], [core.length][hypercore-length], and [core.key][hypercore-key] of the [Hypercore][hypercore] behind the [Hyperdrive][hyperdrive] behind the Pear application
+- **formation** - the starting shape of a team on the pitch (e.g. 4-3-3, 3-5-2)
+- **play** - a discrete tactical move (a run, a pass lane, a set piece) drawn on the board
+- **pitch** - the playing surface; Tamarind templates it as 11v11, 7v7, futsal, or training grid
+- **set piece** - a rehearsed play from a dead-ball situation (corner, free kick, throw-in)
+- **tactical board** - the shared canvas where a team composes a plan: a formation, a deal pipeline, an idea board, or anything in between
+- **deal pipeline** - the stages a sales opportunity moves through (qualify, demo, proposal, close)
+- **idea board** - a hackathon-style canvas for capturing, voting on, and grouping candidate ideas
+- **run-of-show** - a planned sequence of segments for a demo, presentation, or live event
+- **scope-cut** - the decision to drop a planned item mid-event to ship on time
+- **AI coach** - Tamarind's on-device analyzer that rates a plan and suggests adjustments
+- **Phantom Coach** - the long-term vision: computer vision watches a match, populates the board with player movements, and gives voice feedback
+- **autobase** - multi-writer replicated log; used in Tamarind to sync the board state between team members
+- **audit log** - the immutable Hypercore append-only record of every tactical adjustment
 
 ## Development <a name="development"></a>
 
@@ -1306,6 +1383,8 @@ Tamarind is built on the excellent open-source P2P stack from [Holepunch](https:
 - **[hyperswarm](https://github.com/holepunchto/hyperswarm)** — peer discovery
 
 The renderer is built with [React](https://react.dev), [Vite](https://vitejs.dev), [Tailwind CSS](https://tailwindcss.com), [framer-motion](https://www.framer.com/motion/), and [lucide-react](https://lucide.dev).
+
+Planned for upcoming sprints: [Konva.js](https://konvajs.org/) for the tactical canvas (Sprint 1), [Autobase](https://github.com/holepunchto/autobase) for multi-writer P2P sync (Sprint 2), and [Ollama](https://ollama.com) for the on-device AI coach and Phantom Coach voice feedback (Sprints 3 &mdash; 4).
 
 <!-- Reference Links -->
 

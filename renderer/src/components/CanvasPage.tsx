@@ -28,7 +28,8 @@ export function CanvasPage() {
             Canvas
           </h1>
           <p className='mt-3 max-w-md text-sm text-tamarind-700/80'>
-            Infinite canvas, sticky notes, and freehand drawing &mdash; coming in Sprint 1.
+            Tactical surfaces for any team that needs to win &mdash; pitch, pipeline, or
+            idea board &mdash; coming in Sprint 1.
           </p>
           <p className='mt-1 text-xs uppercase tracking-widest text-tamarind-500'>
             Local-first &middot; P2P synced
