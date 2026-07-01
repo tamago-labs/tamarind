@@ -31,6 +31,10 @@ interface PropertiesDrawerProps {
   onTransientUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
   onBringToFront: () => void
   onSendToBack: () => void
+  // Slot rendered when `selectedCount === 0`. Phase 2 wires this to
+  // the GroupChatPanel so the empty properties drawer doubles as
+  // the chat + invite surface.
+  emptyPanel?: React.ReactNode
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -56,9 +60,11 @@ export function PropertiesDrawer({
   onUpdate,
   onTransientUpdate,
   onBringToFront,
-  onSendToBack
+  onSendToBack,
+  emptyPanel
 }: PropertiesDrawerProps) {
   if (selectedCount === 0) {
+    if (emptyPanel) return <>{emptyPanel}</>
     return (
       <aside
         aria-label='Properties'

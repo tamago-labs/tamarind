@@ -24,6 +24,12 @@ export interface BridgeAPI {
   writeWorkerIPC(specifier: string, data: string | Uint8Array): Promise<void>
 }
 
+// Worker specifiers. Picked by the renderer when calling
+// `bridge.startWorker(SPEC)` — must match the path arguments in
+// `electron/main.js`'s `getWorker()`.
+export const MAIN_WORKER = '/workers/main.js'
+export const ROOM_WORKER = '/workers/tamarind-room-entry.js'
+
 const noopBridge: BridgeAPI = {
   pkg: () => ({ name: 'tamarind', productName: 'Tamarind', version: '0.0.0' }),
   applyUpdate: () => Promise.resolve(),

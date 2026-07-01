@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "offset": 0,
+  "schema": [
+    {
+      "id": 0,
+      "name": "@tamarind/add-writer",
+      "requestType": "@tamarind/writer",
+      "version": 1
+    },
+    {
+      "id": 1,
+      "name": "@tamarind/add-invite",
+      "requestType": "@tamarind/invite",
+      "version": 1
+    },
+    {
+      "id": 2,
+      "name": "@tamarind/add-board",
+      "requestType": "@tamarind/board",
+      "version": 1
+    },
+    {
+      "id": 3,
+      "name": "@tamarind/rename-board",
+      "requestType": "@tamarind/board-rename",
+      "version": 1
+    },
+    {
+      "id": 4,
+      "name": "@tamarind/delete-board",
+      "requestType": "@tamarind/board-delete",
+      "version": 1
+    },
+    {
+      "id": 5,
+      "name": "@tamarind/add-item",
+      "requestType": "@tamarind/item",
+      "version": 1
+    },
+    {
+      "id": 6,
+      "name": "@tamarind/add-items",
+      "requestType": "@tamarind/item-batch",
+      "version": 1
+    },
+    {
+      "id": 7,
+      "name": "@tamarind/update-item",
+      "requestType": "@tamarind/item-update",
+      "version": 1
+    },
+    {
+      "id": 8,
+      "name": "@tamarind/reorder",
+      "requestType": "@tamarind/item-reorder",
+      "version": 1
+    },
+    {
+      "id": 9,
+      "name": "@tamarind/remove-item",
+      "requestType": "@tamarind/item-remove",
+      "version": 1
+    },
+    {
+      "id": 10,
+      "name": "@tamarind/remove-items",
+      "requestType": "@tamarind/items-remove",
+      "version": 1
+    },
+    {
+      "id": 11,
+      "name": "@tamarind/add-chat",
+      "requestType": "@tamarind/chat-msg",
+      "version": 1
+    }
+  ]
+}
