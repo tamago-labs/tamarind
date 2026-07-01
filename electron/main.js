@@ -44,10 +44,19 @@ const cmd = command(
 
 cmd.parse(app.isPackaged ? process.argv.slice(1) : process.argv.slice(2))
 
-const pearStore = cmd.flags.storage
+// Resolve to absolute so callers can pass either form — e.g.
+// `start:guest` uses `--storage ./tmp-tamarind-guest`. Electron's
+// `app.setPath` rejects relative paths and `PearRuntime.run`'s argv
+// doesn't normalize either, so binding the resolved form once here
+// keeps `getWorker()`'s `dir = pearStore` and `setPath` consistent.
+const pearStore = cmd.flags.storage ? path.resolve(cmd.flags.storage) : null
 const updates = cmd.flags.updates
 const displayName = cmd.flags.name || null
-const joinInvite = cmd.flags.invite || null
+// `currentJoinInvite` is mutable so the renderer can swap host → guest
+// mid-session via the splash's "Join existing board" toggle (see
+// `pear:joinWithInvite`). The CLI `--invite` flag still seeds the
+// initial value for tests / automation.
+let currentJoinInvite = cmd.flags.invite || null
 const writerKey = cmd.flags.writer || null
 
 if (pearStore) app.setPath('userData', pearStore)
@@ -70,7 +79,7 @@ function sendToAll(name, data) {
 }
 
 function getWorker(specifier) {
-  if (workers.has(specifier)) return workers.get(specifier)
+  if (workers.has(specifier)) return workers.get(specifier).pipe
   const appPath = getAppPath()
   let dir = null
   if (pearStore) {
@@ -99,7 +108,7 @@ function getWorker(specifier) {
   const argv = [dir, appPath, updates, version, upgrade, productName + extension]
   if (specifier === roomWorkerSpecifier) {
     if (displayName) argv.push('--name', displayName)
-    if (joinInvite) argv.push('--invite', joinInvite)
+    if (currentJoinInvite) argv.push('--invite', currentJoinInvite)
     if (writerKey) argv.push('--writer', writerKey)
   }
 
@@ -128,11 +137,18 @@ function getWorker(specifier) {
   ipcMain.handle('pear:worker:writeIPC:' + specifier, (evt, data) => {
     return pipe.write(data)
   })
-  workers.set(specifier, pipe)
+  // Wraps the pipe + a torn flag. `restartRoomWorker` flips `torn=true`
+  // synchronously before its `pipe.destroy()` so the trailing exit
+  // handler below short-circuits and doesn't strip the handlers the
+  // subsequent `getWorker()` call is about to register.
+  const entry = { pipe, torn: false }
+  workers.set(specifier, entry)
   pipe.on('data', sendWorkerIPC)
   worker.stdout.on('data', sendWorkerStdout)
   worker.stderr.on('data', sendWorkerStderr)
   worker.once('exit', (code) => {
+    if (entry.torn) return
+    entry.torn = true
     app.removeListener('before-quit', onBeforeQuit)
     ipcMain.removeHandler('pear:worker:writeIPC:' + specifier)
     pipe.removeListener('data', sendWorkerIPC)
@@ -143,6 +159,33 @@ function getWorker(specifier) {
   })
   app.on('before-quit', onBeforeQuit)
   return pipe
+}
+
+// Tear down the current room worker (if any) and spawn a fresh one with
+// the given invite. The renderer drives this via `bridge.joinWithInvite`
+// to switch host → guest without restarting Electron. The renderer's
+// `useRoom` hook subscribes to `pear:worker:exit` to reset its store
+// before the new worker's `status` / `role` / `invite` events arrive.
+function restartRoomWorker(invite) {
+  const existing = workers.get(roomWorkerSpecifier)
+  if (existing) {
+    // `pipe.destroy()` is async — the worker's `once('exit')` cleanup
+    // (registered inside getWorker) fires on a future tick and would
+    // race with the getWorker() call below. We do the teardown work
+    // synchronously here, flip `entry.torn` so the trailing cleanup
+    // short-circuits, and fire `pear:worker:exit` eagerly so the
+    // renderer's `useRoom` resets its singleton store before the new
+    // worker's frames arrive. The dup `ipcMain.handle` would otherwise
+    // throw "Attempted to register a second handler for ...".
+    existing.torn = true
+    ipcMain.removeHandler('pear:worker:writeIPC:' + roomWorkerSpecifier)
+    existing.pipe.removeAllListeners('data')
+    workers.delete(roomWorkerSpecifier)
+    sendToAll('pear:worker:exit:' + roomWorkerSpecifier, null)
+    existing.pipe.destroy()
+  }
+  currentJoinInvite = invite || null
+  return getWorker(roomWorkerSpecifier)
 }
 
 async function createWindow() {
@@ -187,6 +230,9 @@ ipcMain.handle('pear:applyUpdate', () => {
 ipcMain.handle('pear:startWorker', (evt, filename) => {
   getWorker(filename)
   return true
+})
+ipcMain.handle('pear:joinWithInvite', (_evt, invite) => {
+  return restartRoomWorker(invite)
 })
 ipcMain.handle('app:afterUpdate', () => {
   if (isLinux && process.env.APPIMAGE) {

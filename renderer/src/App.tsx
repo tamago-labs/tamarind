@@ -40,6 +40,7 @@ export function App() {
             setHostDismissed(true)
             setPhase('canvas')
           }}
+          onJoinInvite={room.joinInvite}
         />
       ) : (
         <CanvasPage />

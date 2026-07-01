@@ -10,6 +10,7 @@
 // Renderer-side counterpart: `renderer/src/hooks/useRoom.ts`. Wire
 // protocol documented in `C:\Users\pisut\.claude\plans\nested-beaming-reef.md`.
 
+const Autobase = require('autobase')
 const Corestore = require('corestore')
 const debounce = require('debounceify')
 const FramedStream = require('framed-stream')
@@ -308,6 +309,30 @@ async function main() {
   // somewhere to land before the worker task opens.
   await fs.promises.mkdir(storage, { recursive: true })
   await fs.promises.mkdir(path.dirname(identityPath), { recursive: true })
+
+  // When this worker was spawned with --invite (host → guest mid-
+  // session swap via the splash's "Join existing board" toggle) the
+  // local Corestore may already have an Autobase from the previous
+  // host-mode boot. TamarindRoom's `addCandidate` branch is gated on
+  // an empty local core (see tamarind-room.js:48) — so without this
+  // wipe, the new worker would skip the actual join and stay on its
+  // old local key with role=guest + 0 peers. Wiping the Corestore
+  // directory before constructing the task forces addCandidate to
+  // actually run. `identity.json` lives outside `app-storage` so the
+  // writer key + display name survive the wipe.
+  if (initialInvite) {
+    const probeStore = new Corestore(storage)
+    const probe = Autobase.getLocalCore(probeStore)
+    await probe.ready()
+    const len = probe.length
+    await probe.close()
+    await probeStore.close()
+    if (len > 0) {
+      console.log(`[tamarind-room] wiping local storage (length=${len}) to honor --invite`)
+      await fs.promises.rm(storage, { recursive: true, force: true })
+      await fs.promises.mkdir(storage, { recursive: true })
+    }
+  }
 
   const task = new TamarindRoomWorkerTask(pipe, {
     invite: initialInvite,

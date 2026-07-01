@@ -101,6 +101,14 @@ function apply(event: RoomEvent) {
   bumpAndEmit()
 }
 
+function reset() {
+  // The worker either crashed or was intentionally restarted (host →
+  // guest swap). Wipe stale state so the new worker's first
+  // `status:starting` event lands on a clean slate.
+  Object.assign(store, initialState)
+  bumpAndEmit()
+}
+
 function ensureStarted(): Promise<boolean> {
   if (startPromise) return startPromise
   startPromise = bridge
@@ -108,6 +116,10 @@ function ensureStarted(): Promise<boolean> {
     .then(() => {
       if (!unsubscribe) {
         unsubscribe = onRoomEvent((event) => apply(event as RoomEvent))
+        // `pear:joinWithInvite` kills + respawns the room worker in
+        // main.js; the renderer needs to forget everything from the
+        // previous boot before the new worker's events arrive.
+        bridge.onWorkerExit(ROOM_WORKER, () => reset())
       }
       return true
     })
@@ -185,7 +197,11 @@ export function useRoom(): RoomState & {
   }, [])
 
   const joinInvite = useCallback((invite: string) => {
-    writeRoom({ type: 'join-invite', invite }).catch((err) => {
+    // Tells main.js to kill + respawn the room worker with `--invite
+    // <code>`. The renderer doesn't wait — the worker exit / restart
+    // drives a fresh status → role → invite cycle through `useRoom`'s
+    // existing IPC subscription.
+    bridge.joinWithInvite(invite).catch((err) => {
       console.error('[tamarind] joinInvite failed:', err)
     })
   }, [])

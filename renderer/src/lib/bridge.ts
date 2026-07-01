@@ -17,6 +17,7 @@ export interface BridgeAPI {
   applyUpdate(): Promise<void>
   appAfterUpdate(): Promise<void>
   startWorker(specifier: string): Promise<boolean>
+  joinWithInvite(invite: string): Promise<boolean>
   onWorkerStdout(specifier: string, listener: (data: Uint8Array) => void): () => void
   onWorkerStderr(specifier: string, listener: (data: Uint8Array) => void): () => void
   onWorkerIPC(specifier: string, listener: (data: Uint8Array) => void): () => void
@@ -35,6 +36,7 @@ const noopBridge: BridgeAPI = {
   applyUpdate: () => Promise.resolve(),
   appAfterUpdate: () => Promise.resolve(),
   startWorker: () => Promise.resolve(false),
+  joinWithInvite: () => Promise.resolve(false),
   onWorkerStdout: () => () => {},
   onWorkerStderr: () => () => {},
   onWorkerIPC: () => () => {},

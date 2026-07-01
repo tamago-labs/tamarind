@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('bridge', {
   applyUpdate: () => ipcRenderer.invoke('pear:applyUpdate'),
   appAfterUpdate: () => ipcRenderer.invoke('app:afterUpdate'),
   startWorker: (specifier) => ipcRenderer.invoke('pear:startWorker', specifier),
+  joinWithInvite: (invite) => ipcRenderer.invoke('pear:joinWithInvite', invite),
   onWorkerStdout: (specifier, listener) => {
     const wrap = (evt, data) => listener(toBuffer(data))
     ipcRenderer.on('pear:worker:stdout:' + specifier, wrap)

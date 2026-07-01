@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, Copy, Loader2, Sparkles } from 'lucide-react'
+import { Check, Copy, Loader2, LogIn, Sparkles, X } from 'lucide-react'
 import type { RoomRole } from '../hooks/useRoom'
 
 interface SplashPageProps {
@@ -9,10 +9,23 @@ interface SplashPageProps {
   writable: boolean
   error: string | null
   onOpenCanvas: () => void
+  // Switch host → guest mid-session. Triggers a worker restart in
+  // main.js with `--invite <code>`; the splash stays mounted while the
+  // new worker boots and the role flips to 'guest'.
+  onJoinInvite: (invite: string) => void
 }
 
-export function SplashPage({ role, invite, writable, error, onOpenCanvas }: SplashPageProps) {
+export function SplashPage({
+  role,
+  invite,
+  writable,
+  error,
+  onOpenCanvas,
+  onJoinInvite
+}: SplashPageProps) {
   const [copied, setCopied] = useState(false)
+  const [showJoin, setShowJoin] = useState(false)
+  const [joinCode, setJoinCode] = useState('')
 
   function handleCopy() {
     if (!invite) return
@@ -24,7 +37,17 @@ export function SplashPage({ role, invite, writable, error, onOpenCanvas }: Spla
     }
   }
 
+  function handleJoinSubmit() {
+    const code = joinCode.trim()
+    if (!code) return
+    onJoinInvite(code)
+    // Keep the form mounted; the splash flips back to a starting spinner
+    // because `useRoom` resets the store on worker exit. The form is
+    // hidden by `showJoin` only when the user explicitly cancels.
+  }
+
   const ready = role !== null && writable
+  const joining = showJoin && (!ready || role === null)
 
   return (
     <motion.div
@@ -61,9 +84,11 @@ export function SplashPage({ role, invite, writable, error, onOpenCanvas }: Spla
           <span>
             {error
               ? `Failed to start Tamarind: ${error}`
-              : role === null
-                ? 'Connecting to local peers\u2026'
-                : 'Starting Tamarind\u2026'}
+              : joining
+                ? `Joining with invite\u2026`
+                : role === null
+                  ? 'Connecting to local peers\u2026'
+                  : 'Starting Tamarind\u2026'}
           </span>
         </motion.div>
       )}
@@ -110,6 +135,77 @@ export function SplashPage({ role, invite, writable, error, onOpenCanvas }: Spla
           )}
         </motion.div>
       )}
+
+      {/* "Join existing board" — always available so a second Tamarind
+          instance can switch from default-host to guest without needing
+          to relaunch with `--invite` on the CLI. Toggling shows a paste
+          input; submitting triggers `bridge.joinWithInvite`, which kills
+          + respawns the room worker in main.js. */}
+      <div className='mt-8 flex flex-col items-center gap-2 px-6'>
+        {!showJoin ? (
+          <button
+            type='button'
+            onClick={() => setShowJoin(true)}
+            aria-label='Join existing board'
+            className='inline-flex items-center gap-1.5 rounded-md border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/30'
+          >
+            <LogIn className='h-3.5 w-3.5' aria-hidden='true' />
+            Join existing board
+          </button>
+        ) : (
+          <div className='flex w-full max-w-sm flex-col gap-2 rounded-md border border-white/20 bg-white/5 p-3 backdrop-blur'>
+            <label
+              htmlFor='splash-invite-input'
+              className='text-[11px] font-semibold uppercase tracking-wide text-white/70'
+            >
+              Paste invite code
+            </label>
+            <div className='flex items-center gap-2'>
+              <input
+                id='splash-invite-input'
+                type='text'
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    handleJoinSubmit()
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault()
+                    setShowJoin(false)
+                    setJoinCode('')
+                  }
+                }}
+                placeholder='e.g. yrya…'
+                spellCheck={false}
+                autoComplete='off'
+                aria-label='Invite code'
+                className='h-8 flex-1 rounded border border-white/20 bg-white/10 px-2 font-mono text-xs text-white placeholder-white/40 focus:border-white/40 focus:outline-none'
+              />
+              <button
+                type='button'
+                onClick={handleJoinSubmit}
+                disabled={!joinCode.trim() || joining}
+                aria-label='Join with invite code'
+                className='inline-flex h-8 items-center rounded-md bg-white px-3 text-xs font-semibold text-tamarind-700 transition hover:bg-white/90 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-50'
+              >
+                Join
+              </button>
+              <button
+                type='button'
+                onClick={() => {
+                  setShowJoin(false)
+                  setJoinCode('')
+                }}
+                aria-label='Cancel join'
+                className='inline-flex h-8 w-8 items-center justify-center rounded-md text-white/70 transition hover:bg-white/10'
+              >
+                <X className='h-3.5 w-3.5' aria-hidden='true' />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </motion.div>
   )
 }

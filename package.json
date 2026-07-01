@@ -13,9 +13,12 @@
     "lint": "prettier --check . && lunte",
     "format": "prettier --write . && lunte --fix",
     "dev:vite": "vite",
+    "dev:vite:guest": "vite --port 5174",
     "dev:electron": "wait-on tcp:5173 && cross-env PEAR_DEV_SERVER_URL=http://localhost:5173 electron-forge start -- --no-updates",
+    "dev:electron:guest": "wait-on tcp:5174 && cross-env PEAR_DEV_SERVER_URL=http://localhost:5174 electron-forge start -- --no-updates --storage ./tmp-tamarind-guest",
     "build:worker-specs": "node schema.js",
     "start": "npm run build:worker-specs && concurrently -k -n vite,electron -c blue,green \"npm:dev:vite\" \"npm:dev:electron\"",
+    "start:guest": "npm run build:worker-specs && concurrently -k -n vite,electron -c blue,green \"npm:dev:vite:guest\" \"npm:dev:electron:guest\"",
     "build:renderer": "npm run build:worker-specs && vite build",
     "package": "npm run build:renderer && electron-forge package",
     "make": "npm run build:renderer && electron-forge make"
