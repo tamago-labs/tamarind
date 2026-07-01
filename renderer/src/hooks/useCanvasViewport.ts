@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { MouseEvent as ReactMouseEvent } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 
 export const ZOOM_MIN = 0.25
 export const ZOOM_MAX = 4
@@ -26,8 +26,12 @@ export function useCanvasViewport() {
     setPan({ x: 0, y: 0 })
   }, [])
 
-  const onSurfaceMouseDown = useCallback(
-    (e: ReactMouseEvent<HTMLDivElement>) => {
+  const onSurfacePointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      // Defence in depth: if the pointerdown actually hit a child (a shape,
+      // a resize handle, the drawer) we never want to start a pan. This is
+      // belt-and-braces alongside the event-type unification in Fix 1.
+      if (e.target !== e.currentTarget) return
       // Left button (0) and middle button (1) start a pan. Right-click is
       // suppressed at the element level so the context menu never appears
       // over the canvas.
@@ -72,24 +76,29 @@ export function useCanvasViewport() {
     return () => surface.removeEventListener('wheel', handleWheel)
   }, [pan, zoom])
 
-  // Pan: window-level mousemove/mouseup so the drag continues even when
-  // the cursor leaves the canvas surface.
+  // Pan: window-level pointermove/pointerup so the drag continues even when
+  // the cursor leaves the canvas surface, and works for touch + pen. We use
+  // pointer events to match the surface-level `onPointerDown` and the shape
+  // drag handlers — keeping every interaction in one event family prevents
+  // the "drag a shape, everything pans too" bug.
   useEffect(() => {
     if (!isPanning) return
-    function onMove(e: MouseEvent) {
+    function onMove(e: PointerEvent) {
       setPan({
         x: panStart.current.panX + (e.clientX - panStart.current.mouseX),
         y: panStart.current.panY + (e.clientY - panStart.current.mouseY)
       })
     }
-    function onUp() {
+    function endPan() {
       setIsPanning(false)
     }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', endPan)
+    window.addEventListener('pointercancel', endPan)
     return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', endPan)
+      window.removeEventListener('pointercancel', endPan)
     }
   }, [isPanning])
 
@@ -97,10 +106,11 @@ export function useCanvasViewport() {
 
   return {
     zoom,
+    pan,
     isPanning,
     surfaceRef,
     worldTransform,
-    onSurfaceMouseDown,
+    onSurfacePointerDown,
     zoomIn: () => zoomBy(ZOOM_STEP),
     zoomOut: () => zoomBy(-ZOOM_STEP),
     resetView,

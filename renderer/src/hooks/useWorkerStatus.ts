@@ -28,16 +28,20 @@ export function useWorkerStatus(): WorkerStatus {
     let cancelled = false
     let offExit: (() => void) | null = null
 
+    console.log('[tamarind] useWorkerStatus: starting worker…')
     ensureWorkerStarted()
       .then(() => {
         if (cancelled) return
+        console.log('[tamarind] useWorkerStatus: worker started OK')
         offExit = bridge.onWorkerExit(MAIN_WORKER, (code) => {
           if (cancelled) return
+          console.log('[tamarind] useWorkerStatus: worker exit', code)
           setStatus(code === 0 ? 'exited' : 'error')
         })
         setStatus('running')
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('[tamarind] useWorkerStatus: worker failed to start', err)
         if (!cancelled) setStatus('error')
       })
 

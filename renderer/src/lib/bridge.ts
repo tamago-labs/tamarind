@@ -1,3 +1,10 @@
+// Electron bridge wrapper. In production the renderer is hosted inside
+// Electron and `window.bridge` is set by `electron/preload.js`. When the
+// renderer is loaded standalone (vite dev server, tests, Storybook),
+// `window.bridge` is undefined; we fall back to a no-op stub so the UI
+// still mounts and Phase 1 reducer actions work — only the P2P worker
+// side effects are silently skipped.
+
 export interface Pkg {
   name: string
   productName: string
@@ -17,10 +24,30 @@ export interface BridgeAPI {
   writeWorkerIPC(specifier: string, data: string | Uint8Array): Promise<void>
 }
 
-export const bridge: BridgeAPI = window.bridge
+const noopBridge: BridgeAPI = {
+  pkg: () => ({ name: 'tamarind', productName: 'Tamarind', version: '0.0.0' }),
+  applyUpdate: () => Promise.resolve(),
+  appAfterUpdate: () => Promise.resolve(),
+  startWorker: () => Promise.resolve(false),
+  onWorkerStdout: () => () => {},
+  onWorkerStderr: () => () => {},
+  onWorkerIPC: () => () => {},
+  onWorkerExit: () => () => {},
+  writeWorkerIPC: () => Promise.resolve()
+}
+
+export const bridge: BridgeAPI =
+  typeof window !== 'undefined' && window.bridge ? window.bridge : noopBridge
+
+if (typeof window !== 'undefined' && !window.bridge) {
+  // Surface the fallback path so we know the renderer is running outside
+  // Electron (vite dev / tests / Storybook) — Phase 1 reducer still works,
+  // but P2P worker side effects are silently no-op'd.
+  console.warn('[tamarind] bridge: window.bridge missing, using no-op stub')
+}
 
 declare global {
   interface Window {
-    bridge: BridgeAPI
+    bridge?: BridgeAPI
   }
 }
