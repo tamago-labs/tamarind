@@ -19,19 +19,25 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { motion } from 'framer-motion'
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
+import { useRoom } from '../hooks/useRoom'
 import { canvasReducer } from '../canvas/canvasReducer'
 import type { Action, CanvasState } from '../canvas/canvasReducer'
 import { withHistory, type HistoryState } from '../canvas/history'
-import { isConnector } from '../canvas/types'
-import { getPortWorld } from '../canvas/types'
-import type { BoardScopedItem, ConnectorEnd, GenericShapeType, ResizeHandle } from '../canvas/types'
 import {
   DEFAULT_BOARD_NAME,
   DEFAULT_FILL,
   DEFAULT_NOTE_TEXT,
   DEFAULT_SHAPE_SIZE,
   DEFAULT_STROKE,
-  DEFAULT_STROKE_WIDTH
+  DEFAULT_STROKE_WIDTH,
+  getPortWorld,
+  isConnector,
+  type ActiveBoard,
+  type Board,
+  type BoardScopedItem,
+  type ConnectorEnd,
+  type GenericShapeType,
+  type ResizeHandle
 } from '../canvas/types'
 import { uid } from '../canvas/id'
 import { computeDragPatch, computeMultiDragPatch } from '../canvas/drag'
@@ -40,6 +46,7 @@ import { Marquee } from '../canvas/Marquee'
 import { CanvasFooter } from './CanvasFooter'
 import { CanvasToolbar } from './CanvasToolbar'
 import { PropertiesDrawer } from './PropertiesDrawer'
+import { GroupChatPanel } from './GroupChatPanel'
 
 const MIN_SHAPE_SIZE = 20
 
@@ -79,12 +86,59 @@ export function CanvasPage() {
     canZoomOut
   } = useCanvasViewport()
 
+  const room = useRoom()
+
   const [historyState, dispatch] = useReducer(
     withHistory(canvasReducer),
     undefined,
     makeInitialHistoryState
   )
   const state = historyState.present
+
+  // P2P integration: hydrate the reducer from the worker's snapshot,
+  // and mirror every local dispatch through the worker. The reducer
+  // shape (`snapshot` action replaces `present`) was already
+  // designed for this in Phase 1; Phase 2 wires it through.
+  const lastSnapshotRef = useRef<unknown>(null)
+  useEffect(() => {
+    if (!room.snapshot) return
+    // Skip when the snapshot is byte-identical to the last one we
+    // dispatched — prevents an extra history-past push when the
+    // worker echoes our own writes.
+    if (lastSnapshotRef.current === room.snapshot) return
+    lastSnapshotRef.current = room.snapshot
+    const activeBoard: ActiveBoard | null = room.snapshot.activeBoardId
+      ? { key: 'current', boardId: room.snapshot.activeBoardId }
+      : null
+    // Worker-decoded items already match BoardScopedItem for the
+    // local reducer's purposes (ids are hex strings, connector
+    // endpoints are parsed back into plain objects). The double-
+    // cast through `unknown` is needed because the worker's `type`
+    // is a free `string` while the reducer's `ShapeType` is a
+    // narrow union; we trust the worker to only emit shapes the
+    // renderer ever created.
+    dispatch({
+      type: 'snapshot',
+      boards: room.snapshot.boards,
+      items: room.snapshot.items as unknown as BoardScopedItem[],
+      activeBoard
+    })
+  }, [room.snapshot, dispatch])
+
+  // Stable ref to `sendAction` so `dispatchAction` stays referentially
+  // stable across renders (otherwise every room.snapshot would force
+  // re-binding of every keyboard / drag handler).
+  const sendActionRef = useRef(room.sendAction)
+  sendActionRef.current = room.sendAction
+  const dispatchAction = useCallback(
+    (action: Action) => {
+      dispatch(action)
+      // Local-only actions never reach the wire; the hook filter covers
+      // most of them but stay defensive here too.
+      sendActionRef.current(action)
+    },
+    [dispatch]
+  )
 
   // Ephemeral selection — Set for O(1) membership. Pairs with a ref
   // mirror so window-level event handlers always see the latest set
@@ -215,10 +269,6 @@ export function CanvasPage() {
     },
     [state.activeBoardId, computeSpawnWorld]
   )
-
-  // Internal dispatch with stable identity (no deps) so window listeners
-  // re-registering on every change don't fire frequently.
-  const dispatchAction = useCallback((action: Action) => dispatch(action), [])
 
   // Selection setters used by the shape tree. Three modes:
   //   replace — swap the selection to the single new id (or empty)
@@ -484,6 +534,47 @@ export function CanvasPage() {
     })
   }, [itemsArray, handleUpdate])
 
+  // ── Boards ─────────────────────────────────────────────────────
+  // Add / select / rename / delete the active board. Boards lifecycle
+  // is local + sync'd (set-active + reorder-boards are renderer-only
+  // and not forwarded to the worker).
+  const handleAddBoard = useCallback(() => {
+    const now = Date.now()
+    const order = state.boards.length
+    const board: Board = {
+      id: uid(),
+      name: `${DEFAULT_BOARD_NAME} ${order + 1}`,
+      createdAt: now,
+      updatedAt: now,
+      order
+    }
+    dispatchAction({ type: 'add-board', board })
+    setSelectedIds(new Set())
+  }, [dispatchAction, state.boards.length])
+
+  const handleSelectBoard = useCallback(
+    (id: string) => {
+      dispatchAction({ type: 'set-active', id })
+      setSelectedIds(new Set())
+    },
+    [dispatchAction]
+  )
+
+  const handleRenameBoard = useCallback(
+    (id: string, name: string) => {
+      dispatchAction({ type: 'rename-board', id, name, at: Date.now() })
+    },
+    [dispatchAction]
+  )
+
+  const handleDeleteBoard = useCallback(
+    (id: string) => {
+      dispatchAction({ type: 'delete-board', id })
+      setSelectedIds(new Set())
+    },
+    [dispatchAction]
+  )
+
   // Clipboard ops. Pasted items get fresh ids and a (20,20) offset so
   // they don't stack on top of the originals. Attached lines carrying
   // `kind:'attached'` re-target the same itemId — orphan cascade on
@@ -700,6 +791,12 @@ export function CanvasPage() {
         marqueeActive={marqueeMode}
         onMarqueePressStart={handleMarqueePressStart}
         onMarqueePressEnd={handleMarqueePressEnd}
+        boards={state.boards}
+        activeBoardId={state.activeBoardId}
+        onSelectBoard={handleSelectBoard}
+        onAddBoard={handleAddBoard}
+        onRenameBoard={handleRenameBoard}
+        onDeleteBoard={handleDeleteBoard}
       />
       <div className='flex flex-1 flex-row overflow-hidden'>
         <main
@@ -743,6 +840,23 @@ export function CanvasPage() {
           onTransientUpdate={handleTransientUpdate}
           onBringToFront={handleBringToFront}
           onSendToBack={handleSendToBack}
+          emptyPanel={
+            <GroupChatPanel
+              invite={room.invite}
+              peers={room.peers}
+              messages={room.chat}
+              role={room.role}
+              writable={room.writable}
+              me={room.me}
+              onSendChat={room.sendChat}
+              onCopyInvite={() => {
+                if (!room.invite) return
+                if (navigator.clipboard?.writeText) {
+                  navigator.clipboard.writeText(room.invite).catch(() => {})
+                }
+              }}
+            />
+          }
         />
       </div>
       <CanvasFooter />

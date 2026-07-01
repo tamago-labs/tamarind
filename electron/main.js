@@ -4,6 +4,21 @@ const path = require('path')
 const PearRuntime = require('pear-runtime')
 const FramedStream = require('framed-stream')
 
+// Smoke-test harness opt-in. Electron's CLI parser rejects these as
+// unknown switches (the port flag interferes with --inspect; modern
+// Electron tightened --no-sandbox too). Forwarding them via
+// `app.commandLine.appendSwitch` is the documented programmatic path —
+// gated by env vars so production CLI parsing stays untouched.
+if (process.env.TAMARIND_REMOTE_DEBUGGING_PORT) {
+  app.commandLine.appendSwitch(
+    'remote-debugging-port',
+    String(process.env.TAMARIND_REMOTE_DEBUGGING_PORT)
+  )
+}
+if (process.env.TAMARIND_NO_SANDBOX === '1') {
+  app.commandLine.appendSwitch('no-sandbox')
+}
+
 const { isMac, isLinux, isWindows } = require('which-runtime')
 const { command, flag } = require('paparam')
 const pkg = require('../package.json')
@@ -11,6 +26,7 @@ const { name, productName, version, upgrade } = pkg
 
 const protocol = name
 const mainWorkerSpecifier = '/workers/main.js'
+const roomWorkerSpecifier = '/workers/tamarind-room-entry.js'
 
 const workers = new Map()
 
@@ -20,13 +36,19 @@ const cmd = command(
   appName,
   flag('--storage <dir>', 'pass custom storage to pear-runtime'),
   flag('--no-updates', 'start without OTA updates'),
-  flag('--no-sandbox', 'start without Chromium sandbox').hide()
+  flag('--no-sandbox', 'start without Chromium sandbox').hide(),
+  flag('--name <name>', 'Your display name (shown in chat)'),
+  flag('--invite <invite>', 'Join an existing Tamarind room via invite code'),
+  flag('--writer <hex>', 'Override the writer key (hex) for testing')
 )
 
 cmd.parse(app.isPackaged ? process.argv.slice(1) : process.argv.slice(2))
 
 const pearStore = cmd.flags.storage
 const updates = cmd.flags.updates
+const displayName = cmd.flags.name || null
+const joinInvite = cmd.flags.invite || null
+const writerKey = cmd.flags.writer || null
 
 if (pearStore) app.setPath('userData', pearStore)
 
@@ -70,20 +92,31 @@ function getWorker(specifier) {
 
   const extension = isLinux ? '.AppImage' : isMac ? '.app' : '.msix'
 
-  const worker = PearRuntime.run(require.resolve('..' + specifier), [
-    dir,
-    appPath,
-    updates,
-    version,
-    upgrade,
-    productName + extension
-  ])
+  // Default argv = the updater worker's positional args. The data-plane
+  // (room) worker reads its own argv layout — see
+  // workers/tamarind-room-entry.js — so we extend the base argv with
+  // the room-only flags (`--name`, `--invite`, `--writer`).
+  const argv = [dir, appPath, updates, version, upgrade, productName + extension]
+  if (specifier === roomWorkerSpecifier) {
+    if (displayName) argv.push('--name', displayName)
+    if (joinInvite) argv.push('--invite', joinInvite)
+    if (writerKey) argv.push('--writer', writerKey)
+  }
+
+  const worker = PearRuntime.run(require.resolve('..' + specifier), argv)
   const pipe = new FramedStream(worker)
 
   function sendWorkerStdout(data) {
+    // Mirror the worker stdout to the main process terminal too — same
+    // tee as example-2's main.js — so `npm start -- --storage X` shows
+    // the worker's `[tamarind-room] invite: …` line in the launching
+    // shell. Without this, the only place to read worker logs is the
+    // renderer's DevTools console.
+    process.stdout.write(data)
     sendToAll('pear:worker:stdout:' + specifier, data)
   }
   function sendWorkerStderr(data) {
+    process.stderr.write(data)
     sendToAll('pear:worker:stderr:' + specifier, data)
   }
   function sendWorkerIPC(data) {

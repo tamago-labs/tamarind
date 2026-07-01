@@ -1,4 +1,5 @@
-// Top toolbar for the canvas. Five groups, left to right:
+// Top toolbar for the canvas. Six groups, left to right:
+//   • Boards menu    — switch active board, add, rename, delete
 //   • Zoom controls   — wheel-zoom presets anchored at cursor centre
 //   • Marquee toggle  — click once to arm, drag empty area to select,
 //                       click again (or press Escape) to disarm
@@ -24,7 +25,8 @@ import {
   ZoomIn,
   ZoomOut
 } from 'lucide-react'
-import type { GenericShapeType } from '../canvas/types'
+import type { Board, GenericShapeType } from '../canvas/types'
+import { BoardsMenu } from './BoardsMenu'
 
 interface CanvasToolbarProps {
   zoom: number
@@ -34,6 +36,8 @@ interface CanvasToolbarProps {
   canUndo: boolean
   canRedo: boolean
   marqueeActive: boolean
+  boards: Board[]
+  activeBoardId: string | null
   onZoomIn: () => void
   onZoomOut: () => void
   onResetZoom: () => void
@@ -43,6 +47,10 @@ interface CanvasToolbarProps {
   onRedo: () => void
   onMarqueePressStart: () => void
   onMarqueePressEnd: () => void
+  onSelectBoard: (id: string) => void
+  onAddBoard: () => void
+  onRenameBoard: (id: string, name: string) => void
+  onDeleteBoard: (id: string) => void
 }
 
 const SHORTCUT_HINT = 'Cmd/Ctrl+Z to undo · Cmd/Ctrl+Shift+Z to redo · Cmd/Ctrl+A to select all'
@@ -150,6 +158,8 @@ export function CanvasToolbar({
   canUndo,
   canRedo,
   marqueeActive,
+  boards,
+  activeBoardId,
   onZoomIn,
   onZoomOut,
   onResetZoom,
@@ -158,7 +168,11 @@ export function CanvasToolbar({
   onUndo,
   onRedo,
   onMarqueePressStart,
-  onMarqueePressEnd
+  onMarqueePressEnd,
+  onSelectBoard,
+  onAddBoard,
+  onRenameBoard,
+  onDeleteBoard
 }: CanvasToolbarProps) {
   return (
     <header
@@ -166,6 +180,17 @@ export function CanvasToolbar({
       className='relative flex h-12 w-full items-center justify-center border-b border-gray-200 bg-gray-100 px-4'
     >
       <div className='flex items-center gap-1'>
+        {/* Boards menu */}
+        <BoardsMenu
+          boards={boards}
+          activeBoardId={activeBoardId}
+          onSelect={onSelectBoard}
+          onAdd={onAddBoard}
+          onRename={onRenameBoard}
+          onDelete={onDeleteBoard}
+        />
+        <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
+
         {/* Zoom group */}
         <IconButton label='Zoom out' onClick={onZoomOut} disabled={!canZoomOut}>
           <ZoomOut className='h-4 w-4' aria-hidden='true' />
