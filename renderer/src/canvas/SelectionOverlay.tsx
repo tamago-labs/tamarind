@@ -2,39 +2,24 @@
 // ignores pointer events so it never intercepts clicks meant for the
 // shape underneath. `pointerEvents="none"` is critical — without it the
 // overlay would steal drag activation.
+//
+// For connectors (line/arrow) the bbox spans the resolved endpoints,
+// so a line that snaps to two distant rectangles still gets a single
+// selection overlay covering both endpoints.
 
 import type { BoardScopedItem } from './types'
-import { SELECT_STROKE } from './types'
+import { SELECT_STROKE, computeBoundingBox } from './types'
 
-interface BBox {
-  x: number
-  y: number
-  w: number
-  h: number
+interface SelectionOverlayProps {
+  item: BoardScopedItem
+  itemsById: Record<string, BoardScopedItem>
+  // Optional snap-target highlight drawn when this shape is the current
+  // snap candidate during a connector-endpoint drag.
+  snapTarget?: boolean
 }
 
-function boundingBox(item: BoardScopedItem): BBox {
-  switch (item.type) {
-    case 'rect':
-    case 'ellipse':
-    case 'note':
-      return { x: item.x, y: item.y, w: item.w ?? 0, h: item.h ?? 0 }
-    case 'line':
-    case 'arrow': {
-      const x2 = item.x2 ?? 0
-      const y2 = item.y2 ?? 0
-      const minX = Math.min(item.x, x2)
-      const minY = Math.min(item.y, y2)
-      // Pad lines so a 0-length line still shows a visible box.
-      const w = Math.max(Math.abs(x2 - item.x), 4) + 4
-      const h = Math.max(Math.abs(y2 - item.y), 4) + 4
-      return { x: minX - 2, y: minY - 2, w, h }
-    }
-  }
-}
-
-export function SelectionOverlay({ item }: { item: BoardScopedItem }) {
-  const b = boundingBox(item)
+export function SelectionOverlay({ item, itemsById, snapTarget }: SelectionOverlayProps) {
+  const b = computeBoundingBox(item, itemsById)
   return (
     <rect
       x={b.x}
@@ -43,9 +28,10 @@ export function SelectionOverlay({ item }: { item: BoardScopedItem }) {
       height={b.h}
       fill='none'
       stroke={SELECT_STROKE}
-      strokeWidth={1.5}
-      strokeDasharray='4 3'
+      strokeWidth={snapTarget ? 2 : 1.5}
+      strokeDasharray={snapTarget ? '6 4' : '4 3'}
       pointerEvents='none'
+      className={snapTarget ? 'animate-pulse' : undefined}
     />
   )
 }

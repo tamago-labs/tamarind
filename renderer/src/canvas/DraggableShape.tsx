@@ -1,39 +1,42 @@
-// Renders one canvas item and wires it to drag → `onDragEnd`. The shape
-// itself is a SVG `<g>` (dnd-kit is DOM-only, so we use native pointer
-// events). Pointerdown calls `stopPropagation` so the surface-level pan
-// listener doesn't fire, and selects the shape before any drag threshold
-// is crossed. Drag end converts viewport-pixel deltas back to world
-// coordinates via `delta / zoom` (matches `useCanvasViewport`).
+// Renders one canvas item and wires it to:
 //
-// During a drag we apply a transient `translate(dx/zoom dy/zoom)` to an
-// inner `<g>` so the shape (plus its selection overlay and resize
-// handles) follows the cursor live. Only on `pointerup` do we dispatch
-// `move-item` and clear the ghost — avoids the "shape teleports on
-// release" feel of commit-only drags and keeps the reducer quiet during
-// the gesture.
+//   • Single-shape drag   — local ghost translate on pointermove,
+//                           `onCommitDrag(id, dx, dy)` on pointerup.
+//   • Multi-shape drag    — `onMaybeMultiDrag(primaryId, e)` early-
+//                           hand-off so the parent's window-level
+//                           orchestrator can move every selected item.
 //
-// `onUpdate` is threaded down so NoteShape can persist inline text edits
-// without a full drag cycle.
+// `ShapeForItem` threads `itemsById` so `LineShape` and `ArrowShape`
+// can resolve connector endpoints to world positions via `resolveEnd`.
+//
+// Resize handles only render when this is the sole selected shape —
+// resizing a multi-selection isn't supported (matches Figma's
+// behaviour and avoids ambiguous geometry updates).
 
 import { useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { BoardScopedItem, ResizeHandle } from './types'
+import { isConnector, isResizable } from './types'
 import { RectShape } from './shapes/RectShape'
 import { EllipseShape } from './shapes/EllipseShape'
 import { LineShape } from './shapes/LineShape'
 import { ArrowShape } from './shapes/ArrowShape'
-import { NoteShape } from './shapes/NoteShape'
 import { SelectionOverlay } from './SelectionOverlay'
 import { ResizeHandles } from './ResizeHandles'
-import { isResizable } from './types'
+import { ConnectorHandles } from './ConnectorHandles'
 
 interface DraggableShapeProps {
   item: BoardScopedItem
   selected: boolean
+  selectedIds: Set<string>
   zoom: number
-  onSelect: (id: string) => void
-  onDragEnd: (id: string, x: number, y: number) => void
+  itemsById: Record<string, BoardScopedItem>
+  surfaceRef: React.RefObject<HTMLDivElement | null>
+  onSelect: (id: string | null, mode: 'replace' | 'toggle' | 'add') => void
+  onCommitDrag: (id: string, dx: number, dy: number) => void
+  onMaybeMultiDrag: (primaryId: string, e: ReactPointerEvent<SVGGElement>) => boolean
   onUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
+  onTransientUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
   onResize: (
     id: string,
     handle: ResizeHandle,
@@ -45,46 +48,76 @@ interface DraggableShapeProps {
 
 function ShapeForItem({
   item,
+  itemsById,
   onUpdate
 }: {
   item: BoardScopedItem
-  onUpdate: DraggableShapeProps['onUpdate']
+  itemsById: Record<string, BoardScopedItem>
+  // Rect / Ellipse use this for in-place text editing via TextOverlay.
+  // Connectors ignore it.
+  onUpdate: (patch: Partial<BoardScopedItem>) => void
 }) {
   switch (item.type) {
     case 'rect':
-      return <RectShape item={item} />
+      return <RectShape item={item} onUpdate={onUpdate} />
     case 'ellipse':
-      return <EllipseShape item={item} />
+      return <EllipseShape item={item} onUpdate={onUpdate} />
     case 'line':
-      return <LineShape item={item} />
+      return <LineShape item={item} itemsById={itemsById} />
     case 'arrow':
-      return <ArrowShape item={item} />
-    case 'note':
-      return <NoteShape item={item} onUpdate={(patch) => onUpdate(item.id, patch)} />
+      return <ArrowShape item={item} itemsById={itemsById} />
   }
 }
 
 export function DraggableShape({
   item,
   selected,
+  selectedIds,
   zoom,
+  itemsById,
+  surfaceRef,
   onSelect,
-  onDragEnd,
+  onCommitDrag,
+  onMaybeMultiDrag,
   onUpdate,
+  onTransientUpdate,
   onResize
 }: DraggableShapeProps) {
   const dragStart = useRef<{ x: number; y: number } | null>(null)
   // Live drag offset in viewport pixels. Dividing by `zoom` gives the
   // world-space translation we apply to the inner <g>.
-  const [dragDelta, setDragDelta] = useState<{ dx: number; dy: number }>({ dx: 0, dy: 0 })
+  const [dragDelta, setDragDelta] = useState<{ dx: number; dy: number }>({
+    dx: 0,
+    dy: 0
+  })
 
   function handlePointerDown(e: ReactPointerEvent<SVGGElement>) {
     if (e.button !== 0) return
     // Stop the surface pan from activating on a shape click. Both this
-    // handler and the surface pan now use pointerdown (Fix 1), so a
-    // single stopPropagation covers both event families.
+    // handler and the surface pan use pointerdown (Fix 1), so a single
+    // stopPropagation covers both event families.
     e.stopPropagation()
-    onSelect(item.id)
+    // Selection rules:
+    //   • Plain click on an unselected item → replace.
+    //   • Plain click on the only selected item → no-op (preserve sel).
+    //   • Plain click on a member of a multi-selection → no-op (preserve sel).
+    //   • Shift-click → toggle membership.
+    if (e.shiftKey) {
+      onSelect(item.id, 'toggle')
+    } else if (selected) {
+      // Clicking an already-selected item keeps the selection so the
+      // user can immediately drag the whole group.
+    } else {
+      onSelect(item.id, 'replace')
+    }
+    // If this item is part of a multi-selection, hand off to the
+    // parent's window-level orchestrator. The orchestrator installs
+    // its own pointer listeners and returns true; we bail out of
+    // our own single-drag setup.
+    if (selectedIds.has(item.id) && selectedIds.size > 1) {
+      const handled = onMaybeMultiDrag(item.id, e)
+      if (handled) return
+    }
     dragStart.current = { x: e.clientX, y: e.clientY }
     setDragDelta({ dx: 0, dy: 0 })
 
@@ -106,7 +139,7 @@ export function DraggableShape({
       const dy = ev.clientY - start.y
       // Ignore sub-pixel movement so a click never drifts the shape.
       if (Math.abs(dx) + Math.abs(dy) < 2) return
-      onDragEnd(item.id, item.x + dx / zoom, item.y + dy / zoom)
+      onCommitDrag(item.id, dx, dy)
     }
 
     function handleCancel() {
@@ -131,15 +164,35 @@ export function DraggableShape({
     ? `translate(${dragDelta.dx / zoom} ${dragDelta.dy / zoom})`
     : undefined
 
+  // Resize handles only when this is the sole selected shape — sizing
+  // a multi-selection isn't part of this iteration.
+  const showResize = selected && selectedIds.size === 1 && isResizable(item.type)
+
   return (
     <g onPointerDown={handlePointerDown} style={{ cursor: 'move' }}>
       <g transform={ghostTransform}>
-        <ShapeForItem item={item} onUpdate={onUpdate} />
-        {selected && <SelectionOverlay item={item} />}
-        {selected && isResizable(item.type) && (
+        <ShapeForItem
+          item={item}
+          itemsById={itemsById}
+          onUpdate={(patch) =>
+            isDragging ? onTransientUpdate(item.id, patch) : onUpdate(item.id, patch)
+          }
+        />
+        {selected && <SelectionOverlay item={item} itemsById={itemsById} />}
+        {showResize && (
           <ResizeHandles
             item={item}
             onResize={(handle, origin, dx, dy) => onResize(item.id, handle, origin, dx, dy)}
+          />
+        )}
+        {selected && isConnector(item.type) && surfaceRef.current && (
+          <ConnectorHandles
+            item={item}
+            zoom={zoom}
+            surfaceRect={surfaceRef.current.getBoundingClientRect()}
+            itemsById={itemsById}
+            onUpdate={onUpdate}
+            onTransientUpdate={onTransientUpdate}
           />
         )}
       </g>

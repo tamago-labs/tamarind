@@ -1,19 +1,20 @@
-// Top toolbar for the canvas. Four groups, left to right:
+// Top toolbar for the canvas. Five groups, left to right:
 //   • Zoom controls  — wheel-zoom presets anchored at cursor centre
-//   • Shape palette  — rect, ellipse, line, arrow, note
-//   • Selection ops  — delete (disabled when nothing selected)
-//   • History        — undo / redo (disabled this pass)
-//
-// Shape buttons insert an item at a pan-invariant stacking offset via
-// `onAddShape` from the parent (Phase 1 dispatch; Phase 3 IPC).
+//   • Shape palette  — rect, ellipse, line, arrow (rect/ellipse
+//                      accept an optional text caption via double-click
+//                      on the shape body)
+//   • Selection ops  — bring to front, send to back, delete
+//   • History        — undo / redo (real buttons; phase 1+ short-lived)
+//   • Clipboard hint — keyboard shortcuts shown in tooltips
 
 import {
   ArrowRight,
+  ChevronDown,
+  ChevronUp,
   Circle,
   Minus,
   Redo2,
   Square,
-  StickyNote,
   Trash2,
   Undo2,
   ZoomIn,
@@ -26,14 +27,20 @@ interface CanvasToolbarProps {
   canZoomIn: boolean
   canZoomOut: boolean
   hasSelection: boolean
+  canUndo: boolean
+  canRedo: boolean
   onZoomIn: () => void
   onZoomOut: () => void
   onResetZoom: () => void
   onAddShape: (type: GenericShapeType) => void
   onDelete: () => void
+  onUndo: () => void
+  onRedo: () => void
+  onBringToFront: () => void
+  onSendToBack: () => void
 }
 
-const COMING_SOON = 'Coming in Sprint 1'
+const SHORTCUT_HINT = 'Cmd/Ctrl+Z to undo · Cmd/Ctrl+Shift+Z to redo · Cmd/Ctrl+A to select all'
 
 function IconButton({
   label,
@@ -91,14 +98,23 @@ export function CanvasToolbar({
   canZoomIn,
   canZoomOut,
   hasSelection,
+  canUndo,
+  canRedo,
   onZoomIn,
   onZoomOut,
   onResetZoom,
   onAddShape,
-  onDelete
+  onDelete,
+  onUndo,
+  onRedo,
+  onBringToFront,
+  onSendToBack
 }: CanvasToolbarProps) {
   return (
-    <header className='relative flex h-12 w-full items-center justify-center border-b border-gray-200 bg-gray-100 px-4'>
+    <header
+      title={SHORTCUT_HINT}
+      className='relative flex h-12 w-full items-center justify-center border-b border-gray-200 bg-gray-100 px-4'
+    >
       <div className='flex items-center gap-1'>
         {/* Zoom group */}
         <IconButton label='Zoom out' onClick={onZoomOut} disabled={!canZoomOut}>
@@ -131,13 +147,26 @@ export function CanvasToolbar({
         <ShapeButton label='Add arrow' onClick={() => onAddShape('arrow')}>
           <ArrowRight className='h-4 w-4' aria-hidden='true' />
         </ShapeButton>
-        <ShapeButton label='Add note' onClick={() => onAddShape('note')}>
-          <StickyNote className='h-4 w-4' aria-hidden='true' />
-        </ShapeButton>
 
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 
-        {/* Selection group */}
+        {/* Z-order group */}
+        <IconButton
+          label='Bring selected to front (top of stack)'
+          onClick={onBringToFront}
+          disabled={!hasSelection}
+        >
+          <ChevronUp className='h-4 w-4' aria-hidden='true' />
+        </IconButton>
+        <IconButton
+          label='Send selected to back (bottom of stack)'
+          onClick={onSendToBack}
+          disabled={!hasSelection}
+        >
+          <ChevronDown className='h-4 w-4' aria-hidden='true' />
+        </IconButton>
+
+        {/* Delete */}
         <IconButton label='Delete selected' onClick={onDelete} disabled={!hasSelection}>
           <Trash2 className='h-4 w-4' aria-hidden='true' />
         </IconButton>
@@ -145,10 +174,18 @@ export function CanvasToolbar({
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 
         {/* History group */}
-        <IconButton label={`Undo (${COMING_SOON})`} disabled>
+        <IconButton
+          label={`Undo (Cmd/Ctrl+Z)${canUndo ? '' : ' — nothing to undo'}`}
+          onClick={onUndo}
+          disabled={!canUndo}
+        >
           <Undo2 className='h-4 w-4' aria-hidden='true' />
         </IconButton>
-        <IconButton label={`Redo (${COMING_SOON})`} disabled>
+        <IconButton
+          label={`Redo (Cmd/Ctrl+Shift+Z)${canRedo ? '' : ' — nothing to redo'}`}
+          onClick={onRedo}
+          disabled={!canRedo}
+        >
           <Redo2 className='h-4 w-4' aria-hidden='true' />
         </IconButton>
       </div>

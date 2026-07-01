@@ -1,16 +1,27 @@
 import type { BoardScopedItem } from '../types'
+import { TextOverlay } from './TextOverlay'
 
-export function RectShape({ item }: { item: BoardScopedItem }) {
+interface RectShapeProps {
+  item: BoardScopedItem
+  onUpdate?: (patch: Partial<BoardScopedItem>) => void
+}
+
+export function RectShape({ item, onUpdate }: RectShapeProps) {
   if (item.type !== 'rect') return null
+  const w = item.w ?? 0
+  const h = item.h ?? 0
   return (
-    <rect
-      x={item.x}
-      y={item.y}
-      width={item.w ?? 0}
-      height={item.h ?? 0}
-      fill={item.fill ?? 'none'}
-      stroke={item.stroke}
-      strokeWidth={item.strokeWidth}
-    />
+    <g>
+      <rect
+        x={item.x}
+        y={item.y}
+        width={w}
+        height={h}
+        fill={item.fill ?? 'none'}
+        stroke={item.stroke}
+        strokeWidth={item.strokeWidth}
+      />
+      {onUpdate && <TextOverlay item={item} width={w} height={h} onUpdate={onUpdate} />}
+    </g>
   )
 }

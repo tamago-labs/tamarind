@@ -6,12 +6,25 @@
 // reducer's per-action dispatches with a single `snapshot` action
 // pushed by the worker; the reducer shape and CanvasState type stay
 // identical so the swap is local to this file.
+//
+// Iteration: editing table-stakes + connectors. Adds:
+//   • selectedIds (Set) + ref mirror for window-level handlers
+//   • withHistory wrapper for Cmd/Ctrl+Z/Y
+//   • Keyboard nudge (arrows), clipboard (Cmd/Ctrl+C/X/V/D)
+//   • Multi-shape group drag (delegated by DraggableShape)
+//   • Z-order bring/send-to-front/back buttons
+//   • Connector-endpoint construction + helper-driven drag patches
 
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import { motion } from 'framer-motion'
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
 import { canvasReducer } from '../canvas/canvasReducer'
-import type { BoardScopedItem, GenericShapeType } from '../canvas/types'
+import type { Action, CanvasState } from '../canvas/canvasReducer'
+import { withHistory, type HistoryState } from '../canvas/history'
+import { isConnector } from '../canvas/types'
+import { getPortWorld } from '../canvas/types'
+import type { BoardScopedItem, ConnectorEnd, GenericShapeType, ResizeHandle } from '../canvas/types'
 import {
   DEFAULT_BOARD_NAME,
   DEFAULT_FILL,
@@ -21,12 +34,16 @@ import {
   DEFAULT_STROKE_WIDTH
 } from '../canvas/types'
 import { uid } from '../canvas/id'
+import { computeDragPatch, computeMultiDragPatch } from '../canvas/drag'
 import { CanvasItems } from '../canvas/CanvasItems'
+import { Marquee } from '../canvas/Marquee'
 import { CanvasFooter } from './CanvasFooter'
 import { CanvasToolbar } from './CanvasToolbar'
 import { PropertiesDrawer } from './PropertiesDrawer'
 
-function makeInitialState() {
+const MIN_SHAPE_SIZE = 20
+
+function makeInitialCanvasState(): CanvasState {
   const now = Date.now()
   const id = uid()
   const board = {
@@ -38,12 +55,15 @@ function makeInitialState() {
   }
   return {
     boards: [board],
-    items: {} as Record<string, BoardScopedItem>,
-    activeBoardId: id
+    items: {},
+    activeBoardId: id,
+    orderCounter: 0
   }
 }
 
-const MIN_SHAPE_SIZE = 20
+function makeInitialHistoryState(): HistoryState {
+  return { past: [], present: makeInitialCanvasState(), future: [] }
+}
 
 export function CanvasPage() {
   const {
@@ -59,11 +79,39 @@ export function CanvasPage() {
     canZoomOut
   } = useCanvasViewport()
 
-  const [state, dispatch] = useReducer(canvasReducer, undefined, makeInitialState)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [historyState, dispatch] = useReducer(
+    withHistory(canvasReducer),
+    undefined,
+    makeInitialHistoryState
+  )
+  const state = historyState.present
 
-  const itemsArray = useMemo(() => Object.values(state.items), [state.items])
-  const selectedItem = selectedId ? (state.items[selectedId] ?? null) : null
+  // Ephemeral selection — Set for O(1) membership. Pairs with a ref
+  // mirror so window-level event handlers always see the latest set
+  // without forcing a listener re-bind on every selection change.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const selectedIdsRef = useRef<Set<string>>(new Set())
+  selectedIdsRef.current = selectedIds
+
+  // Ephemeral clipboard (in-memory only).
+  const [clipboard, setClipboard] = useState<BoardScopedItem[] | null>(null)
+
+  // Sort by `order` so render order is stable and matches what the
+  // z-order buttons manipulate. Items without an explicit order fall
+  // back to insertion order (already maintained by Record).
+  const itemsArray = useMemo(
+    () => Object.values(state.items).sort((a, b) => a.order - b.order),
+    [state.items]
+  )
+  const visibleItemIds = useMemo(
+    () => itemsArray.filter((it) => it.boardId === state.activeBoardId).map((it) => it.id),
+    [itemsArray, state.activeBoardId]
+  )
+  const itemsById = state.items
+
+  // Single selected (legacy single-selection shape — used when only
+  // one item is selected and we want the rich properties drawer UI).
+  const singleSelected = selectedIds.size === 1 ? (itemsById[[...selectedIds][0]] ?? null) : null
 
   // Spawn shapes at a pan-invariant world position with a 40px stacking
   // offset per item on the active board. Avoids the "shapes spawn at
@@ -99,56 +147,102 @@ export function CanvasPage() {
             fill: DEFAULT_FILL,
             stroke: DEFAULT_STROKE,
             strokeWidth: DEFAULT_STROKE_WIDTH,
+            text: DEFAULT_NOTE_TEXT,
+            order: 0,
             updatedAt: now
           }
           break
         case 'line':
-        case 'arrow':
+        case 'arrow': {
+          // Connectors carry `start` / `end` (free-floating by default).
+          const start: ConnectorEnd = { kind: 'free', x, y }
+          const end: ConnectorEnd = { kind: 'free', x: x + 200, y }
           item = {
             id,
             boardId: state.activeBoardId,
             type,
             x,
             y,
-            x2: x + 200,
-            y2: y,
             stroke: DEFAULT_STROKE,
             strokeWidth: DEFAULT_STROKE_WIDTH,
+            lineCap: 'round',
+            start,
+            end,
+            order: 0,
             updatedAt: now
           }
           break
-        case 'note':
-          item = {
-            id,
-            boardId: state.activeBoardId,
-            type,
-            x,
-            y,
-            w: DEFAULT_SHAPE_SIZE.w,
-            h: DEFAULT_SHAPE_SIZE.h,
-            text: DEFAULT_NOTE_TEXT,
-            stroke: DEFAULT_STROKE,
-            strokeWidth: DEFAULT_STROKE_WIDTH,
-            updatedAt: now
-          }
-          break
+        }
       }
-      dispatch({ type: 'add-item', item })
-      setSelectedId(id)
+      // `order` is overridden by the reducer; the placeholder keeps
+      // the type-checker happy until the reducer assigns it.
+      dispatchAction({ type: 'add-item', item: { ...item, order: 0 } })
+      // Selecting a newly-spawned shape keeps it visible to the user.
+      setSelectedIds(new Set([id]))
     },
     [state.activeBoardId, computeSpawnWorld]
   )
 
-  const handleDragEnd = useCallback((id: string, x: number, y: number) => {
-    dispatch({ type: 'move-item', id, x, y, at: Date.now() })
-  }, [])
+  // Internal dispatch with stable identity (no deps) so window listeners
+  // re-registering on every change don't fire frequently.
+  const dispatchAction = useCallback((action: Action) => dispatch(action), [])
 
-  // Single seam for every property edit (fill, stroke, strokeWidth,
-  // text, fontSize, lineCap, x/y/w/h/x2/y2). Used by the properties
-  // drawer, resize handles, and note text editing.
-  const handleUpdate = useCallback((id: string, patch: Partial<BoardScopedItem>) => {
-    dispatch({ type: 'update-item', id, patch, at: Date.now() })
-  }, [])
+  // Selection setters used by the shape tree. Three modes:
+  //   replace — swap the selection to the single new id (or empty)
+  //   toggle  — flip membership of the clicked id
+  //   add     — union the new id into the existing set
+  // Clicking an already-selected item with no modifier is a no-op
+  // (so multi-drag doesn't deselect when the user grabs a member).
+  const handleSelect = useCallback(
+    (id: string | null, mode: 'replace' | 'toggle' | 'add' = 'replace') => {
+      setSelectedIds((prev) => {
+        if (id === null) {
+          // Background click — clear, regardless of mode.
+          return new Set()
+        }
+        if (mode === 'toggle') {
+          const next = new Set(prev)
+          if (next.has(id)) next.delete(id)
+          else next.add(id)
+          return next
+        }
+        if (mode === 'add') {
+          const next = new Set(prev)
+          next.add(id)
+          return next
+        }
+        // replace: keep multi-selection if id is already in it (no-op).
+        if (prev.has(id) && prev.size > 1) return prev
+        return new Set([id])
+      })
+    },
+    []
+  )
+
+  // Single seam for every property edit. Used by the properties
+  // drawer, resize handles, connector drag, and z-order bump.
+  const handleUpdate = useCallback(
+    (id: string, patch: Partial<BoardScopedItem>) => {
+      dispatchAction({ type: 'update-item', id, patch, at: Date.now() })
+    },
+    [dispatchAction]
+  )
+
+  // Same as `handleUpdate` but the history wrapper won't push the
+  // change onto the past stack. Used for per-pointermove updates
+  // during resize, multi-drag, and connector snap preview.
+  const handleTransientUpdate = useCallback(
+    (id: string, patch: Partial<BoardScopedItem>) => {
+      dispatchAction({
+        type: 'update-item',
+        id,
+        patch,
+        at: Date.now(),
+        meta: { transient: true }
+      })
+    },
+    [dispatchAction]
+  )
 
   // Resize math for the 4 corner handles. `dx, dy` are viewport-pixel
   // deltas from drag start (cumulative). `origin` is the snapshot of
@@ -156,13 +250,7 @@ export function CanvasPage() {
   // compute the new x/y/w/h from the original geometry every tick
   // (avoids React-stale-closure drift on rapid drags).
   const handleResize = useCallback(
-    (
-      id: string,
-      handle: 'nw' | 'ne' | 'sw' | 'se',
-      origin: BoardScopedItem,
-      dx: number,
-      dy: number
-    ) => {
+    (id: string, handle: ResizeHandle, origin: BoardScopedItem, dx: number, dy: number) => {
       const w0 = origin.w ?? DEFAULT_SHAPE_SIZE.w
       const h0 = origin.h ?? DEFAULT_SHAPE_SIZE.h
       const ddx = dx / zoom
@@ -211,35 +299,347 @@ export function CanvasPage() {
     [zoom, handleUpdate]
   )
 
-  const handleDelete = useCallback(() => {
-    if (!selectedId) return
-    dispatch({ type: 'remove-item', id: selectedId })
-    setSelectedId(null)
-  }, [selectedId])
+  // Commit a single-shape drag translation. `dx`, `dy` are viewport
+  // pixels. Lines/arrows get special handling via `computeDragPatch`
+  // so both endpoints (and any attached hosts) shift together.
+  const handleCommitDrag = useCallback(
+    (id: string, dx: number, dy: number) => {
+      const item = state.items[id]
+      if (!item) return
+      const patch = computeDragPatch({
+        item,
+        dx,
+        dy,
+        zoom,
+        itemsById: state.items
+      })
+      handleUpdate(id, patch)
+    },
+    [zoom, state.items, handleUpdate]
+  )
 
-  // Keyboard shortcuts: Delete / Backspace removes the selected shape.
-  // Skip when the user is typing in an input/textarea/contenteditable
-  // (mirrors the tamaflow Canvas.tsx pattern).
+  // Multi-shape group drag entry point. DraggableShape calls this
+  // when the user pointerdowns on a shape that's part of a multi-
+  // selection; we set up window-level move listeners that dispatch
+  // a transient `update-item` per selected shape per pointermove,
+  // and a non-transient one on pointerup to commit a single history
+  // entry per gesture.
+  const multiDragRef = useRef<{
+    startPositions: Map<string, { x: number; y: number }>
+    startClientX: number
+    startClientY: number
+    ids: string[]
+  } | null>(null)
+
+  const beginMultiDrag = useCallback(
+    (primaryId: string, e: ReactPointerEvent<SVGGElement>) => {
+      const sel = selectedIdsRef.current
+      if (sel.size <= 1 || !sel.has(primaryId)) return false
+      const startPositions = new Map<string, { x: number; y: number }>()
+      const ids: string[] = []
+      for (const id of sel) {
+        const it = state.items[id]
+        if (!it) continue
+        startPositions.set(id, { x: it.x, y: it.y })
+        ids.push(id)
+      }
+      multiDragRef.current = {
+        startPositions,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        ids
+      }
+
+      function onMove(ev: PointerEvent) {
+        const drag = multiDragRef.current
+        if (!drag) return
+        const dx = ev.clientX - drag.startClientX
+        const dy = ev.clientY - drag.startClientY
+        const itemsById = state.items
+        for (const id of drag.ids) {
+          const item = itemsById[id]
+          if (!item) continue
+          const start = drag.startPositions.get(id)
+          if (!start) continue
+          const patch = computeMultiDragPatch(start, item, dx, dy, zoom, itemsById)
+          handleTransientUpdate(id, patch)
+        }
+      }
+
+      function commitTransient(ev: PointerEvent) {
+        const drag = multiDragRef.current
+        if (!drag) return
+        const dx = ev.clientX - drag.startClientX
+        const dy = ev.clientY - drag.startClientY
+        const itemsById = state.items
+        for (const id of drag.ids) {
+          const item = itemsById[id]
+          if (!item) continue
+          const start = drag.startPositions.get(id)
+          if (!start) continue
+          const patch = computeMultiDragPatch(start, item, dx, dy, zoom, itemsById)
+          // Non-transient commit — one history entry per gesture.
+          handleUpdate(id, patch)
+        }
+        multiDragRef.current = null
+        window.removeEventListener('pointermove', onMove)
+        window.removeEventListener('pointerup', commitTransient)
+        window.removeEventListener('pointercancel', cancelDrag)
+      }
+
+      function cancelDrag() {
+        multiDragRef.current = null
+        window.removeEventListener('pointermove', onMove)
+        window.removeEventListener('pointerup', commitTransient)
+        window.removeEventListener('pointercancel', cancelDrag)
+      }
+
+      window.addEventListener('pointermove', onMove)
+      window.addEventListener('pointerup', commitTransient)
+      window.addEventListener('pointercancel', cancelDrag)
+      return true
+    },
+    [state.items, zoom, handleUpdate, handleTransientUpdate]
+  )
+
+  const handleDelete = useCallback(() => {
+    const sel = selectedIdsRef.current
+    if (sel.size === 0) return
+    const ids = Array.from(sel)
+    dispatchAction({ type: 'remove-items', ids, at: Date.now() })
+    setSelectedIds(new Set())
+  }, [dispatchAction])
+
+  const handleSelectAll = useCallback(() => {
+    setSelectedIds(new Set(visibleItemIds))
+  }, [visibleItemIds])
+
+  const handleDeselect = useCallback(() => {
+    setSelectedIds(new Set())
+  }, [])
+
+  const handleUndo = useCallback(() => {
+    dispatchAction({ type: 'undo' })
+  }, [dispatchAction])
+
+  const handleRedo = useCallback(() => {
+    dispatchAction({ type: 'redo' })
+  }, [dispatchAction])
+
+  // Bring-to-front / send-to-back for the current selection. Multi-
+  // selection preserves relative order by assigning contiguous values
+  // so the group's internal z-order doesn't shuffle.
+  const handleBringToFront = useCallback(() => {
+    const sel = selectedIdsRef.current
+    if (sel.size === 0) return
+    // Snapshot current order for the selection (insertion order from
+    // itemsArray) so the chosen relative order is deterministic.
+    const selected = itemsArray.filter((it) => sel.has(it.id))
+    const maxOrder = itemsArray.reduce((acc, it) => Math.max(acc, it.order), 0)
+    selected.forEach((item, i) => {
+      handleUpdate(item.id, { order: maxOrder + 1 + i })
+    })
+  }, [itemsArray, handleUpdate])
+
+  const handleSendToBack = useCallback(() => {
+    const sel = selectedIdsRef.current
+    if (sel.size === 0) return
+    const selected = itemsArray.filter((it) => sel.has(it.id))
+    const minOrder = itemsArray.reduce((acc, it) => Math.min(acc, it.order), 0)
+    selected.forEach((item, i) => {
+      handleUpdate(item.id, { order: minOrder - 1 - i })
+    })
+  }, [itemsArray, handleUpdate])
+
+  // Clipboard ops. Pasted items get fresh ids and a (20,20) offset so
+  // they don't stack on top of the originals. Attached lines carrying
+  // `kind:'attached'` re-target the same itemId — orphan cascade on
+  // the destination board keeps things honest if the host is gone.
+  const handleCopy = useCallback(() => {
+    const sel = selectedIdsRef.current
+    if (sel.size === 0) return
+    const items = itemsArray.filter((it) => sel.has(it.id)).map(deepClone)
+    setClipboard(items)
+  }, [itemsArray])
+
+  const handleCut = useCallback(() => {
+    const sel = selectedIdsRef.current
+    if (sel.size === 0) return
+    const items = itemsArray.filter((it) => sel.has(it.id)).map(deepClone)
+    setClipboard(items)
+    const ids = Array.from(sel)
+    dispatchAction({ type: 'remove-items', ids, at: Date.now() })
+    setSelectedIds(new Set())
+  }, [itemsArray, dispatchAction])
+
+  const handlePaste = useCallback(() => {
+    const clip = clipboard
+    if (!clip || clip.length === 0) return
+    const now = Date.now()
+    const next = clip.map((it, i) => {
+      // Deep clone, reset id, offset position by (20, 20) per index.
+      const fresh = deepClone(it)
+      fresh.id = uid()
+      // Offset start/end (if any) by (20, 20); mirrors the item.x shift.
+      const offset = (i + 1) * 20
+      if (isConnector(fresh.type) && fresh.start && fresh.end) {
+        if (fresh.start.kind === 'free' || fresh.start.kind === 'orphan') {
+          fresh.start = { ...fresh.start, x: fresh.start.x + offset, y: fresh.start.y + offset }
+        }
+        if (fresh.end.kind === 'free' || fresh.end.kind === 'orphan') {
+          fresh.end = { ...fresh.end, x: fresh.end.x + offset, y: fresh.end.y + offset }
+        }
+      }
+      fresh.x = (fresh.x ?? 0) + offset
+      fresh.y = (fresh.y ?? 0) + offset
+      fresh.updatedAt = now
+      return fresh
+    })
+    dispatchAction({ type: 'add-items', items: next, at: now })
+    setSelectedIds(new Set(next.map((it) => it.id)))
+  }, [clipboard, dispatchAction])
+
+  const handleDuplicate = useCallback(() => {
+    const sel = selectedIdsRef.current
+    if (sel.size === 0) return
+    const now = Date.now()
+    const next = itemsArray
+      .filter((it) => sel.has(it.id))
+      .map((it, i) => {
+        const fresh = deepClone(it)
+        fresh.id = uid()
+        const offset = (i + 1) * 20
+        if (isConnector(fresh.type) && fresh.start && fresh.end) {
+          if (fresh.start.kind === 'free' || fresh.start.kind === 'orphan') {
+            fresh.start = { ...fresh.start, x: fresh.start.x + offset, y: fresh.start.y + offset }
+          }
+          if (fresh.end.kind === 'free' || fresh.end.kind === 'orphan') {
+            fresh.end = { ...fresh.end, x: fresh.end.x + offset, y: fresh.end.y + offset }
+          }
+        }
+        fresh.x = (fresh.x ?? 0) + offset
+        fresh.y = (fresh.y ?? 0) + offset
+        fresh.updatedAt = now
+        return fresh
+      })
+    dispatchAction({ type: 'add-items', items: next, at: now })
+    setSelectedIds(new Set(next.map((it) => it.id)))
+  }, [itemsArray, dispatchAction])
+
+  // Keyboard shortcuts. One window-level keydown listener. Native event
+  // capture isn't used: each handler reads state via refs/memos and
+  // short-circuits when focus is in an input/textarea/contentEditable
+  // so the drawer's text fields don't get hijacked.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key !== 'Delete' && e.key !== 'Backspace') return
-      if (!selectedId) return
       const target = e.target as HTMLElement | null
-      if (!target) {
+      const tag = target?.tagName ?? ''
+      const inEditableField =
+        tag === 'INPUT' || tag === 'TEXTAREA' || Boolean(target?.isContentEditable)
+
+      // Undo / redo work even inside inputs (standard app convention).
+      const meta = e.metaKey || e.ctrlKey
+      if (meta && (e.key === 'z' || e.key === 'Z')) {
         e.preventDefault()
-        dispatch({ type: 'remove-item', id: selectedId })
-        setSelectedId(null)
+        if (e.shiftKey) handleRedo()
+        else handleUndo()
         return
       }
-      const tag = target.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return
-      e.preventDefault()
-      dispatch({ type: 'remove-item', id: selectedId })
-      setSelectedId(null)
+      if (meta && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault()
+        handleRedo()
+        return
+      }
+
+      // Clipboard ops require non-editable focus.
+      if (!inEditableField) {
+        if (meta && (e.key === 'c' || e.key === 'C')) {
+          e.preventDefault()
+          handleCopy()
+          return
+        }
+        if (meta && (e.key === 'x' || e.key === 'X')) {
+          e.preventDefault()
+          handleCut()
+          return
+        }
+        if (meta && (e.key === 'v' || e.key === 'V')) {
+          e.preventDefault()
+          handlePaste()
+          return
+        }
+        if (meta && (e.key === 'd' || e.key === 'D')) {
+          e.preventDefault()
+          handleDuplicate()
+          return
+        }
+        if (meta && (e.key === 'a' || e.key === 'A')) {
+          e.preventDefault()
+          handleSelectAll()
+          return
+        }
+        if (e.key === 'Escape') {
+          handleDeselect()
+          return
+        }
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          if (selectedIdsRef.current.size > 0) {
+            e.preventDefault()
+            handleDelete()
+          }
+          return
+        }
+        // Keyboard nudge: arrows move the selection by 1px (10px with Shift).
+        // Skip auto-repeated events so a held arrow doesn't flood history.
+        if (
+          selectedIdsRef.current.size > 0 &&
+          !e.metaKey &&
+          !e.ctrlKey &&
+          !e.altKey &&
+          ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key) &&
+          !e.repeat
+        ) {
+          e.preventDefault()
+          const step = e.shiftKey ? 10 : 1
+          const ddx = (e.key === 'ArrowRight' ? step : e.key === 'ArrowLeft' ? -step : 0) / zoom
+          const ddy = (e.key === 'ArrowDown' ? step : e.key === 'ArrowUp' ? -step : 0) / zoom
+          const itemsById = state.items
+          for (const id of selectedIdsRef.current) {
+            const item = itemsById[id]
+            if (!item) continue
+            if (isConnector(item.type)) {
+              // For connectors, translate both endpoints. `attached` ends
+              // detach to `free` at the original port world position
+              // offset by the nudge; `free` and `orphan` ends shift their
+              // stored x,y. This keeps the line visually tracking the
+              // host's start position.
+              const start = shiftEnd(item.start, ddx, ddy, itemsById)
+              const end = shiftEnd(item.end, ddx, ddy, itemsById)
+              handleUpdate(id, { x: item.x + ddx, y: item.y + ddy, start, end })
+            } else {
+              handleUpdate(id, { x: item.x + ddx, y: item.y + ddy })
+            }
+          }
+          return
+        }
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selectedId])
+  }, [
+    zoom,
+    state.items,
+    handleUpdate,
+    handleCopy,
+    handleCut,
+    handlePaste,
+    handleDuplicate,
+    handleSelectAll,
+    handleDeselect,
+    handleDelete,
+    handleUndo,
+    handleRedo
+  ])
 
   return (
     <motion.div
@@ -259,7 +659,13 @@ export function CanvasPage() {
         onResetZoom={resetView}
         onAddShape={addShape}
         onDelete={handleDelete}
-        hasSelection={selectedId !== null}
+        hasSelection={selectedIds.size > 0}
+        canUndo={historyState.past.length > 0}
+        canRedo={historyState.future.length > 0}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onBringToFront={handleBringToFront}
+        onSendToBack={handleSendToBack}
       />
       <div className='flex flex-1 flex-row overflow-hidden'>
         <main
@@ -273,18 +679,81 @@ export function CanvasPage() {
             <CanvasItems
               items={itemsArray}
               activeBoardId={state.activeBoardId}
-              selectedId={selectedId}
+              selectedIds={selectedIds}
               zoom={zoom}
-              onSelect={setSelectedId}
-              onDragEnd={handleDragEnd}
+              itemsById={itemsById}
+              surfaceRef={surfaceRef}
+              onSelect={handleSelect}
+              onCommitDrag={handleCommitDrag}
+              onMaybeMultiDrag={beginMultiDrag}
               onUpdate={handleUpdate}
               onResize={handleResize}
+              onTransientUpdate={handleTransientUpdate}
             />
           </div>
+          <Marquee
+            surfaceRef={surfaceRef}
+            zoom={zoom}
+            items={itemsArray}
+            itemsById={itemsById}
+            onCommit={(ids) => setSelectedIds(new Set(ids))}
+          />
         </main>
-        <PropertiesDrawer selectedItem={selectedItem} onUpdate={handleUpdate} />
+        <PropertiesDrawer
+          selectedItem={singleSelected}
+          selectedCount={selectedIds.size}
+          selectedIds={Array.from(selectedIds)}
+          itemsById={itemsById}
+          onUpdate={handleUpdate}
+          onTransientUpdate={handleTransientUpdate}
+        />
       </div>
       <CanvasFooter />
     </motion.div>
   )
+}
+
+// Shift a connector endpoint by (ddx, ddy) world units. `attached`
+// ends detach to `free` at the original port world position offset
+// by the nudge; `free` and `orphan` ends shift their stored x,y.
+// Pairs with the keyboard-nudge branch.
+function shiftEnd(
+  end: ConnectorEnd | undefined,
+  ddx: number,
+  ddy: number,
+  itemsById: Record<string, BoardScopedItem>
+): ConnectorEnd | undefined {
+  if (!end) return end
+  if (end.kind === 'attached') {
+    const target = itemsById[end.itemId]
+    if (!target) return { kind: 'orphan', x: 0, y: 0, deletedItemId: end.itemId }
+    const port = getPortWorld(target, end.port)
+    return { kind: 'free', x: port.x + ddx, y: port.y + ddy }
+  }
+  if (end.kind === 'free') {
+    return { kind: 'free', x: end.x + ddx, y: end.y + ddy }
+  }
+  if (end.kind === 'orphan') {
+    return {
+      kind: 'orphan',
+      x: end.x + ddx,
+      y: end.y + ddy,
+      deletedItemId: end.deletedItemId
+    }
+  }
+  return end
+}
+
+// Deep clone a `BoardScopedItem`, including the ConnectorEnd union.
+// Plain `structuredClone` works in modern Electron; we hand-write it
+// so the renderer stays portable to React Native if that ever lands.
+function deepClone<T>(value: T): T {
+  if (typeof structuredClone === 'function') {
+    try {
+      return structuredClone(value)
+    } catch {
+      // fall through
+    }
+  }
+  return JSON.parse(JSON.stringify(value)) as T
 }

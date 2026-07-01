@@ -1,6 +1,7 @@
 // The single SVG world inside the world-transform div. Defines the
 // shared arrowhead marker, renders every item scoped to the active
-// board, and handles empty-area deselect.
+// board, and handles empty-area deselect (single click clears, shift-
+// click preserves — single click is the common case).
 //
 // Coordinate system: the SVG is sized 20k × 20k and offset by
 // (-WORLD_HALF, -WORLD_HALF) so its (0, 0) sits at world (0, 0).
@@ -20,11 +21,15 @@ import { DraggableShape } from './DraggableShape'
 interface CanvasItemsProps {
   items: BoardScopedItem[]
   activeBoardId: string | null
-  selectedId: string | null
+  selectedIds: Set<string>
   zoom: number
-  onSelect: (id: string | null) => void
-  onDragEnd: (id: string, x: number, y: number) => void
+  itemsById: Record<string, BoardScopedItem>
+  surfaceRef: React.RefObject<HTMLDivElement | null>
+  onSelect: (id: string | null, mode: 'replace' | 'toggle' | 'add') => void
+  onCommitDrag: (id: string, dx: number, dy: number) => void
+  onMaybeMultiDrag: (primaryId: string, e: ReactPointerEvent<SVGGElement>) => boolean
   onUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
+  onTransientUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
   onResize: (
     id: string,
     handle: ResizeHandle,
@@ -52,23 +57,27 @@ const svgStyle: CSSProperties = {
 export function CanvasItems({
   items,
   activeBoardId,
-  selectedId,
+  selectedIds,
   zoom,
+  itemsById,
+  surfaceRef,
   onSelect,
-  onDragEnd,
+  onCommitDrag,
+  onMaybeMultiDrag,
   onUpdate,
+  onTransientUpdate,
   onResize
 }: CanvasItemsProps) {
-  // Only items on the active board are visible. Phase 1 boot always
-  // seeds one board, so this is effectively "show everything" until
-  // Phase 2 introduces multi-board switching.
+  // Only items on the active board are visible. Phase 2 will introduce
+  // multi-board switching; until then we filter to the lone board.
   const visibleItems = activeBoardId ? items.filter((it) => it.boardId === activeBoardId) : []
 
   function handleBackgroundPointerDown(e: ReactPointerEvent<SVGSVGElement>) {
     // Only deselect when the pointer landed on the SVG itself, not on a
     // shape — DraggableShape calls stopPropagation so shape clicks never
     // bubble up here, but we double-check via target identity.
-    if (e.target === e.currentTarget) onSelect(null)
+    if (e.target !== e.currentTarget) return
+    onSelect(null, e.shiftKey ? 'add' : 'replace')
   }
 
   return (
@@ -104,11 +113,16 @@ export function CanvasItems({
           <DraggableShape
             key={item.id}
             item={item}
-            selected={selectedId === item.id}
+            selected={selectedIds.has(item.id)}
+            selectedIds={selectedIds}
             zoom={zoom}
+            itemsById={itemsById}
+            surfaceRef={surfaceRef}
             onSelect={onSelect}
-            onDragEnd={onDragEnd}
+            onCommitDrag={onCommitDrag}
+            onMaybeMultiDrag={onMaybeMultiDrag}
             onUpdate={onUpdate}
+            onTransientUpdate={onTransientUpdate}
             onResize={onResize}
           />
         ))}

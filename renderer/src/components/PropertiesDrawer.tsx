@@ -1,7 +1,16 @@
-// Right-side properties drawer. Hidden when nothing is selected;
-// shows shape-conditional controls otherwise. Every control calls
-// `onUpdate(item.id, { field: value })` so the changes flow through
-// the same `update-item` action as resize and inline text editing.
+// Right-side properties drawer. Three modes:
+//
+//   • Nothing selected          — placeholder copy.
+//   • Single shape selected     — full per-type panel. Note text input
+//                                 uses local draft state: each keystroke
+//                                 dispatches a transient `update-item`
+//                                 (skips the history stack), and the
+//                                 final value commits on blur.
+//   • Multiple shapes selected  — count badge plus the *common* fields
+//                                 only (fill, stroke, stroke width).
+//                                 Changes broadcast to every selected
+//                                 id. Shape-conditional sections
+//                                 (text, line cap) are hidden.
 //
 // Stroke width uses `onChange` (fires on commit) rather than `onInput`
 // to avoid dispatching one action per pixel during slider drag — the
@@ -10,11 +19,16 @@
 // Colour pickers use the native `<input type="color">` for now. It's
 // ugly but works everywhere; a swatch palette is a follow-up.
 
+import { useEffect, useRef, useState } from 'react'
 import type { BoardScopedItem, LineCap } from '../canvas/types'
 
 interface PropertiesDrawerProps {
   selectedItem: BoardScopedItem | null
+  selectedCount: number
+  selectedIds: string[]
+  itemsById: Record<string, BoardScopedItem>
   onUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
+  onTransientUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -32,8 +46,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-export function PropertiesDrawer({ selectedItem, onUpdate }: PropertiesDrawerProps) {
-  if (!selectedItem) {
+export function PropertiesDrawer({
+  selectedItem,
+  selectedCount,
+  selectedIds,
+  itemsById,
+  onUpdate,
+  onTransientUpdate
+}: PropertiesDrawerProps) {
+  if (selectedCount === 0) {
     return (
       <aside
         aria-label='Properties'
@@ -45,7 +66,23 @@ export function PropertiesDrawer({ selectedItem, onUpdate }: PropertiesDrawerPro
     )
   }
 
+  if (selectedCount > 1) {
+    return <MultiSelectPanel itemsById={itemsById} selectedIds={selectedIds} onUpdate={onUpdate} />
+  }
+
   const item = selectedItem
+  if (!item) {
+    // Single-count but item is missing — race between delete and render.
+    return (
+      <aside
+        aria-label='Properties'
+        className='flex w-72 shrink-0 flex-col gap-4 border-l border-gray-200 bg-gray-50 p-4 text-xs text-gray-500'
+      >
+        <SectionTitle>Properties</SectionTitle>
+        <p>Loading…</p>
+      </aside>
+    )
+  }
   const id = item.id
 
   return (
@@ -95,7 +132,14 @@ export function PropertiesDrawer({ selectedItem, onUpdate }: PropertiesDrawerPro
         </Field>
       </div>
 
-      {item.type === 'note' && <NoteSection item={item} onUpdate={onUpdate} id={id} />}
+      {(item.type === 'rect' || item.type === 'ellipse') && (
+        <TextSection
+          item={item}
+          onUpdate={onUpdate}
+          onTransientUpdate={onTransientUpdate}
+          id={id}
+        />
+      )}
 
       {(item.type === 'line' || item.type === 'arrow') && (
         <LineSection item={item} onUpdate={onUpdate} id={id} />
@@ -104,23 +148,134 @@ export function PropertiesDrawer({ selectedItem, onUpdate }: PropertiesDrawerPro
   )
 }
 
-function NoteSection({
+function MultiSelectPanel({
+  itemsById,
+  selectedIds,
+  onUpdate
+}: {
+  itemsById: Record<string, BoardScopedItem>
+  selectedIds: string[]
+  onUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
+}) {
+  // Multi-select may include lines / arrows / notes / shapes. We only
+  // expose the *common* fields (fill, stroke, stroke width) so the
+  // panel doesn't promise controls that have no coherent broadcast
+  // value. The first selected item supplies the panel's current
+  // values; changes dispatch per id.
+  const first = itemsById[selectedIds[0]]
+  if (!first) {
+    return (
+      <aside
+        aria-label='Properties'
+        className='flex w-72 shrink-0 flex-col gap-4 border-l border-gray-200 bg-gray-50 p-4 text-xs text-gray-500'
+      >
+        <SectionTitle>Properties</SectionTitle>
+        <p>Loading…</p>
+      </aside>
+    )
+  }
+  return (
+    <aside
+      aria-label='Properties'
+      className='flex w-72 shrink-0 flex-col gap-4 overflow-y-auto border-l border-gray-200 bg-gray-50 p-4'
+    >
+      <div>
+        <SectionTitle>Selection</SectionTitle>
+        <div className='inline-flex h-7 items-center rounded-md bg-white px-2 text-xs font-medium text-gray-700 ring-1 ring-gray-200'>
+          {selectedIds.length} shapes selected
+        </div>
+      </div>
+      <div>
+        <SectionTitle>Appearance</SectionTitle>
+        <p className='mb-2 text-xs text-gray-500'>Changes apply to every selected shape.</p>
+        <Field label='Fill'>
+          <input
+            type='color'
+            value={normaliseColor(first.fill)}
+            onChange={(e) => broadcast(onUpdate, selectedIds, { fill: e.target.value })}
+            aria-label='Fill colour'
+            className='h-7 w-10 cursor-pointer rounded border border-gray-200 bg-white p-0'
+          />
+        </Field>
+        <Field label='Stroke'>
+          <input
+            type='color'
+            value={normaliseColor(first.stroke)}
+            onChange={(e) => broadcast(onUpdate, selectedIds, { stroke: e.target.value })}
+            aria-label='Stroke colour'
+            className='h-7 w-10 cursor-pointer rounded border border-gray-200 bg-white p-0'
+          />
+        </Field>
+        <Field label='Stroke width'>
+          <input
+            type='range'
+            min={1}
+            max={10}
+            step={0.5}
+            value={first.strokeWidth}
+            onChange={(e) =>
+              broadcast(onUpdate, selectedIds, { strokeWidth: Number(e.target.value) })
+            }
+            aria-label='Stroke width'
+            className='w-32'
+          />
+          <span className='w-8 text-right tabular-nums'>{first.strokeWidth}</span>
+        </Field>
+      </div>
+    </aside>
+  )
+}
+
+function broadcast(
+  onUpdate: (id: string, patch: Partial<BoardScopedItem>) => void,
+  ids: string[],
+  patch: Partial<BoardScopedItem>
+) {
+  for (const id of ids) onUpdate(id, patch)
+}
+
+function TextSection({
   item,
   onUpdate,
+  onTransientUpdate,
   id
 }: {
   item: BoardScopedItem
-  onUpdate: PropertiesDrawerProps['onUpdate']
+  onUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
+  onTransientUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
   id: string
 }) {
-  if (item.type !== 'note') return null
+  if (item.type !== 'rect' && item.type !== 'ellipse') return null
+  // Local draft so we can dispatch transient updates per keystroke
+  // without flooding the history stack. The committed value syncs from
+  // `item.text` when external code (e.g. another peer) updates it.
+  const [draft, setDraft] = useState(item.text ?? '')
+  const lastExternalRef = useRef(item.text ?? '')
+  useEffect(() => {
+    if (item.text !== lastExternalRef.current) {
+      lastExternalRef.current = item.text ?? ''
+      setDraft(item.text ?? '')
+    }
+  }, [item.text])
   return (
     <div>
       <SectionTitle>Text</SectionTitle>
       <textarea
-        value={item.text ?? ''}
-        onChange={(e) => onUpdate(id, { text: e.target.value })}
-        aria-label='Note text'
+        value={draft}
+        onChange={(e) => {
+          const next = e.target.value
+          setDraft(next)
+          // Transient — the actual history entry lands on blur. Avoids
+          // one undo step per character for a 50-char note.
+          onTransientUpdate(id, { text: next })
+        }}
+        onBlur={() => {
+          if (draft !== (item.text ?? '')) {
+            lastExternalRef.current = draft
+            onUpdate(id, { text: draft })
+          }
+        }}
+        aria-label='Shape text'
         rows={4}
         className='mb-2 w-full resize-none rounded-md border border-gray-200 bg-white p-2 text-xs text-gray-800 focus:border-tamarind-500 focus:outline-none'
       />
@@ -147,7 +302,7 @@ function LineSection({
   id
 }: {
   item: BoardScopedItem
-  onUpdate: PropertiesDrawerProps['onUpdate']
+  onUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
   id: string
 }) {
   if (item.type !== 'line' && item.type !== 'arrow') return null

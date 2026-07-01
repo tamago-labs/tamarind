@@ -32,6 +32,10 @@ export function useCanvasViewport() {
       // a resize handle, the drawer) we never want to start a pan. This is
       // belt-and-braces alongside the event-type unification in Fix 1.
       if (e.target !== e.currentTarget) return
+      // Shift+drag is owned by the marquee overlay — bail before the pan
+      // gets a chance to fire. The marquee listens at capture phase and
+      // stopPropagation prevents the pan from ever seeing the gesture.
+      if (e.shiftKey) return
       // Left button (0) and middle button (1) start a pan. Right-click is
       // suppressed at the element level so the context menu never appears
       // over the canvas.
