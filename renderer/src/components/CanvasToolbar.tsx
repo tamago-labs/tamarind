@@ -1,17 +1,21 @@
 // Top toolbar for the canvas. Five groups, left to right:
-//   • Zoom controls  — wheel-zoom presets anchored at cursor centre
-//   • Shape palette  — rect, ellipse, line, arrow (rect/ellipse
-//                      accept an optional text caption via double-click
-//                      on the shape body)
-//   • Selection ops  — bring to front, send to back, delete
-//   • History        — undo / redo (real buttons; phase 1+ short-lived)
-//   • Clipboard hint — keyboard shortcuts shown in tooltips
+//   • Zoom controls   — wheel-zoom presets anchored at cursor centre
+//   • Marquee toggle  — click once to arm, drag empty area to select,
+//                       click again (or press Escape) to disarm
+//   • Shape palette   — rect, ellipse, line, arrow (rect/ellipse
+//                       accept an optional text caption via double-click
+//                       on the shape body)
+//   • Delete          — trash icon for the current selection
+//   • History         — undo / redo
+//
+// Bring-to-front / send-to-back live in the right-side PropertiesDrawer
+// alongside the rest of the per-selection actions, where they belong
+// with text labels rather than glyphs that read as "up/down arrows".
 
 import {
   ArrowRight,
-  ChevronDown,
-  ChevronUp,
   Circle,
+  MousePointerSquareDashed,
   Minus,
   Redo2,
   Square,
@@ -29,6 +33,7 @@ interface CanvasToolbarProps {
   hasSelection: boolean
   canUndo: boolean
   canRedo: boolean
+  marqueeActive: boolean
   onZoomIn: () => void
   onZoomOut: () => void
   onResetZoom: () => void
@@ -36,8 +41,8 @@ interface CanvasToolbarProps {
   onDelete: () => void
   onUndo: () => void
   onRedo: () => void
-  onBringToFront: () => void
-  onSendToBack: () => void
+  onMarqueePressStart: () => void
+  onMarqueePressEnd: () => void
 }
 
 const SHORTCUT_HINT = 'Cmd/Ctrl+Z to undo · Cmd/Ctrl+Shift+Z to redo · Cmd/Ctrl+A to select all'
@@ -61,6 +66,50 @@ function IconButton({
       aria-label={label}
       title={label}
       className='inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-700 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-300 disabled:hover:bg-transparent'
+    >
+      {children}
+    </button>
+  )
+}
+
+// Toggle button: click once to arm (aria-pressed=true), click again to
+// disarm. Pairs with the Marquee overlay — when armed, dragging on the
+// canvas draws the selection rect; when disarmed, dragging pans. Mirrors
+// how Adobe / Figma handle the marquee tool: the button persists state,
+// so the user can draw multiple selections in a row without re-clicking.
+function MomentaryButton({
+  label,
+  active,
+  onPressStart,
+  onPressEnd,
+  children
+}: {
+  label: string
+  active: boolean
+  onPressStart: () => void
+  onPressEnd: () => void
+  children: React.ReactNode
+}) {
+  function handleClick() {
+    // Click while disarmed → arm. Click while armed → disarm. The handlers
+    // are wired by CanvasPage to setMarqueeMode(true/false), so toggling
+    // is a single dispatch on each click.
+    if (active) onPressEnd()
+    else onPressStart()
+  }
+  return (
+    <button
+      type='button'
+      aria-label={label}
+      title={label}
+      aria-pressed={active}
+      onClick={handleClick}
+      onContextMenu={(e) => e.preventDefault()}
+      className={
+        active
+          ? 'inline-flex h-8 w-8 items-center justify-center rounded-md bg-blue-500 text-white transition'
+          : 'inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-700 transition hover:bg-gray-200'
+      }
     >
       {children}
     </button>
@@ -100,6 +149,7 @@ export function CanvasToolbar({
   hasSelection,
   canUndo,
   canRedo,
+  marqueeActive,
   onZoomIn,
   onZoomOut,
   onResetZoom,
@@ -107,8 +157,8 @@ export function CanvasToolbar({
   onDelete,
   onUndo,
   onRedo,
-  onBringToFront,
-  onSendToBack
+  onMarqueePressStart,
+  onMarqueePressEnd
 }: CanvasToolbarProps) {
   return (
     <header
@@ -134,6 +184,18 @@ export function CanvasToolbar({
         </IconButton>
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 
+        {/* Marquee selector (momentary) */}
+        <MomentaryButton
+          label='Marquee select (hold and drag on canvas)'
+          active={marqueeActive}
+          onPressStart={onMarqueePressStart}
+          onPressEnd={onMarqueePressEnd}
+        >
+          <MousePointerSquareDashed className='h-4 w-4' aria-hidden='true' />
+        </MomentaryButton>
+
+        <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
+
         {/* Shape group */}
         <ShapeButton label='Add rectangle' onClick={() => onAddShape('rect')}>
           <Square className='h-4 w-4' aria-hidden='true' />
@@ -149,22 +211,6 @@ export function CanvasToolbar({
         </ShapeButton>
 
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
-
-        {/* Z-order group */}
-        <IconButton
-          label='Bring selected to front (top of stack)'
-          onClick={onBringToFront}
-          disabled={!hasSelection}
-        >
-          <ChevronUp className='h-4 w-4' aria-hidden='true' />
-        </IconButton>
-        <IconButton
-          label='Send selected to back (bottom of stack)'
-          onClick={onSendToBack}
-          disabled={!hasSelection}
-        >
-          <ChevronDown className='h-4 w-4' aria-hidden='true' />
-        </IconButton>
 
         {/* Delete */}
         <IconButton label='Delete selected' onClick={onDelete} disabled={!hasSelection}>

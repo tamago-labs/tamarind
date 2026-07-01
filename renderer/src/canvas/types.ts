@@ -124,7 +124,7 @@ export const DEFAULT_BOARD_NAME = 'Untitled'
 export const DEFAULT_STROKE = '#000000'
 export const DEFAULT_STROKE_WIDTH = 2
 export const DEFAULT_FILL = '#ffffff'
-export const SELECT_STROKE = '#21c437' // tamarind-500
+export const SELECT_STROKE = '#3b82f6' // tailwind blue-500; matches the marquee overlay
 
 export const DEFAULT_SHAPE_SIZE = { w: 160, h: 100 }
 export const DEFAULT_NOTE_TEXT = 'Double-click to edit'

@@ -96,6 +96,39 @@ export function CanvasPage() {
   // Ephemeral clipboard (in-memory only).
   const [clipboard, setClipboard] = useState<BoardScopedItem[] | null>(null)
 
+  // Toggle marquee mode. Clicking the toolbar button arms the marquee;
+  // clicking it again (or pressing Escape) disarms it. The toggle stays
+  // armed across many drags — the user can paint several marquees in
+  // a row without re-clicking the button, mirroring how Adobe / Figma
+  // handle the marquee tool.
+  const [marqueeMode, setMarqueeMode] = useState(false)
+  const marqueeModeRef = useRef(false)
+  marqueeModeRef.current = marqueeMode
+
+  const handleMarqueePressStart = useCallback(() => {
+    setMarqueeMode(true)
+  }, [])
+  const handleMarqueePressEnd = useCallback(() => {
+    setMarqueeMode(false)
+  }, [])
+
+  // Disarm marquee on Escape so the user has a single-key way out
+  // without hunting for the toolbar button.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName ?? ''
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
+      if (marqueeModeRef.current) {
+        e.preventDefault()
+        setMarqueeMode(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   // Sort by `order` so render order is stable and matches what the
   // z-order buttons manipulate. Items without an explicit order fall
   // back to insertion order (already maintained by Record).
@@ -664,8 +697,9 @@ export function CanvasPage() {
         canRedo={historyState.future.length > 0}
         onUndo={handleUndo}
         onRedo={handleRedo}
-        onBringToFront={handleBringToFront}
-        onSendToBack={handleSendToBack}
+        marqueeActive={marqueeMode}
+        onMarqueePressStart={handleMarqueePressStart}
+        onMarqueePressEnd={handleMarqueePressEnd}
       />
       <div className='flex flex-1 flex-row overflow-hidden'>
         <main
@@ -696,6 +730,7 @@ export function CanvasPage() {
             zoom={zoom}
             items={itemsArray}
             itemsById={itemsById}
+            enabled={marqueeMode}
             onCommit={(ids) => setSelectedIds(new Set(ids))}
           />
         </main>
@@ -706,6 +741,8 @@ export function CanvasPage() {
           itemsById={itemsById}
           onUpdate={handleUpdate}
           onTransientUpdate={handleTransientUpdate}
+          onBringToFront={handleBringToFront}
+          onSendToBack={handleSendToBack}
         />
       </div>
       <CanvasFooter />

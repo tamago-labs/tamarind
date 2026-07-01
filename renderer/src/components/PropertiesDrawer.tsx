@@ -29,6 +29,8 @@ interface PropertiesDrawerProps {
   itemsById: Record<string, BoardScopedItem>
   onUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
   onTransientUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
+  onBringToFront: () => void
+  onSendToBack: () => void
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -52,7 +54,9 @@ export function PropertiesDrawer({
   selectedIds,
   itemsById,
   onUpdate,
-  onTransientUpdate
+  onTransientUpdate,
+  onBringToFront,
+  onSendToBack
 }: PropertiesDrawerProps) {
   if (selectedCount === 0) {
     return (
@@ -67,7 +71,15 @@ export function PropertiesDrawer({
   }
 
   if (selectedCount > 1) {
-    return <MultiSelectPanel itemsById={itemsById} selectedIds={selectedIds} onUpdate={onUpdate} />
+    return (
+      <MultiSelectPanel
+        itemsById={itemsById}
+        selectedIds={selectedIds}
+        onUpdate={onUpdate}
+        onBringToFront={onBringToFront}
+        onSendToBack={onSendToBack}
+      />
+    )
   }
 
   const item = selectedItem
@@ -132,6 +144,8 @@ export function PropertiesDrawer({
         </Field>
       </div>
 
+      <ArrangeSection onBringToFront={onBringToFront} onSendToBack={onSendToBack} />
+
       {(item.type === 'rect' || item.type === 'ellipse') && (
         <TextSection
           item={item}
@@ -151,11 +165,15 @@ export function PropertiesDrawer({
 function MultiSelectPanel({
   itemsById,
   selectedIds,
-  onUpdate
+  onUpdate,
+  onBringToFront,
+  onSendToBack
 }: {
   itemsById: Record<string, BoardScopedItem>
   selectedIds: string[]
   onUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
+  onBringToFront: () => void
+  onSendToBack: () => void
 }) {
   // Multi-select may include lines / arrows / notes / shapes. We only
   // expose the *common* fields (fill, stroke, stroke width) so the
@@ -222,6 +240,8 @@ function MultiSelectPanel({
           <span className='w-8 text-right tabular-nums'>{first.strokeWidth}</span>
         </Field>
       </div>
+
+      <ArrangeSection onBringToFront={onBringToFront} onSendToBack={onSendToBack} />
     </aside>
   )
 }
@@ -232,6 +252,41 @@ function broadcast(
   patch: Partial<BoardScopedItem>
 ) {
   for (const id of ids) onUpdate(id, patch)
+}
+
+// Stacking-order controls. Lives in the right drawer (not the toolbar)
+// because glyph-only up/down arrows are ambiguous next to shape tools,
+// and "Bring to front" / "Send to back" reads more naturally as a
+// side-panel action alongside the other per-selection ops. Both
+// buttons are full-width text labels — no tooltip-only affordance.
+function ArrangeSection({
+  onBringToFront,
+  onSendToBack
+}: {
+  onBringToFront: () => void
+  onSendToBack: () => void
+}) {
+  return (
+    <div>
+      <SectionTitle>Arrange</SectionTitle>
+      <div className='flex flex-col gap-2'>
+        <button
+          type='button'
+          onClick={onBringToFront}
+          className='inline-flex h-8 w-full items-center justify-center rounded-md border border-gray-200 bg-white px-3 text-xs font-medium text-gray-800 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
+        >
+          Bring to front
+        </button>
+        <button
+          type='button'
+          onClick={onSendToBack}
+          className='inline-flex h-8 w-full items-center justify-center rounded-md border border-gray-200 bg-white px-3 text-xs font-medium text-gray-800 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
+        >
+          Send to back
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function TextSection({

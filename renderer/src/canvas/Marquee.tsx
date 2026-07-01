@@ -1,20 +1,22 @@
-// Shift+drag marquee selector. Lives as a transparent overlay above
-// the canvas surface; capture-phase `pointerdown` handler takes over
-// when the user holds Shift and clicks an empty area, drawing a dashed
-// rectangle and converting it to a selection on release.
+// Marquee selector. Lives as a transparent overlay above the canvas
+// surface; capture-phase `pointerdown` handler takes over when the
+// marquee is armed (`enabled` prop) and the user clicks an empty area,
+// drawing a dashed rectangle and converting it to a selection on release.
 //
 // The overlay is `pointer-events: none` by default so the surface pan
 // (and shape drag) keep working. We add a capture-phase pointerdown
 // listener at the window level that fires for *every* pointerdown and
-// decides based on `e.shiftKey` whether to claim the gesture. If shift
-// is held and the user clicked the surface (or a non-shape child), we
-// stopPropagation so the surface pan bails out and we install our own
-// window-level move/up listeners. Plain clicks fall through untouched.
+// decides based on `enabled` (or the legacy `e.shiftKey` shortcut)
+// whether to claim the gesture. If the marquee is armed and the user
+// clicked the surface (or the SVG background), we stopPropagation so
+// the surface pan bails out and we install our own window-level
+// move/up listeners. Plain clicks fall through untouched.
 //
 // Selection rule: marquee *replaces* the current selection. Shift-
-// marquee isn't a thing in this iteration; shift is reserved for
-// toggling the marquee on/off and the user can re-add the prior
-// selection with shift-click. (Could revisit if the request grows.)
+// marquee isn't a thing in this iteration; shift remains the legacy
+// shortcut (kept for muscle-memory users) and `enabled` is the primary
+// path via the toolbar momentary button. The user can re-add the prior
+// selection with shift-click on each missed item.
 
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
@@ -26,10 +28,11 @@ interface MarqueeProps {
   zoom: number
   items: BoardScopedItem[]
   itemsById: Record<string, BoardScopedItem>
+  enabled: boolean
   onCommit: (ids: string[]) => void
 }
 
-export function Marquee({ surfaceRef, zoom, items, itemsById, onCommit }: MarqueeProps) {
+export function Marquee({ surfaceRef, zoom, items, itemsById, enabled, onCommit }: MarqueeProps) {
   // Rect in viewport coordinates. Only set while a marquee is being
   // drawn; the JSX renders nothing when null.
   const [rect, setRect] = useState<{
@@ -46,7 +49,10 @@ export function Marquee({ surfaceRef, zoom, items, itemsById, onCommit }: Marque
     const surface: HTMLDivElement = surfaceEl
 
     function onPointerDown(e: PointerEvent) {
-      if (!e.shiftKey) return
+      // Marquee arms via two paths: the toolbar momentary button
+      // (`enabled`) or the legacy shift-held shortcut. Either arms
+      // the gesture for this pointerdown.
+      if (!enabled && !e.shiftKey) return
       if (e.button !== 0) return
       const target = e.target as Node | null
       // If the click hit a shape (or any element inside the SVG that
@@ -113,7 +119,7 @@ export function Marquee({ surfaceRef, zoom, items, itemsById, onCommit }: Marque
     // surface's own stopPropagation doesn't beat us to the punch.
     window.addEventListener('pointerdown', onPointerDown, true)
     return () => window.removeEventListener('pointerdown', onPointerDown, true)
-  }, [surfaceRef, zoom, items, itemsById, onCommit])
+  }, [surfaceRef, zoom, items, itemsById, enabled, onCommit])
 
   if (!rect) return null
   const x = Math.min(rect.x0, rect.x1)
@@ -126,8 +132,8 @@ export function Marquee({ surfaceRef, zoom, items, itemsById, onCommit }: Marque
     top: y,
     width: w,
     height: h,
-    border: '1px dashed #21c437',
-    background: 'rgba(33,196,55,0.08)',
+    border: '1px dashed #3b82f6',
+    background: 'rgba(59,130,246,0.08)',
     pointerEvents: 'none',
     zIndex: 50
   }

@@ -28,18 +28,20 @@ export function useCanvasViewport() {
 
   const onSurfacePointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
-      // Defence in depth: if the pointerdown actually hit a child (a shape,
-      // a resize handle, the drawer) we never want to start a pan. This is
-      // belt-and-braces alongside the event-type unification in Fix 1.
-      if (e.target !== e.currentTarget) return
+      // Shape children call stopPropagation on pointerdown (see
+      // DraggableShape.handlePointerDown), so this handler only fires
+      // for clicks on the bare surface area. We deliberately don't
+      // check `e.target !== e.currentTarget` because the world SVG
+      // (CanvasItems) always sits between the cursor and <main>,
+      // making that check reject every empty-area click.
       // Shift+drag is owned by the marquee overlay — bail before the pan
       // gets a chance to fire. The marquee listens at capture phase and
       // stopPropagation prevents the pan from ever seeing the gesture.
       if (e.shiftKey) return
-      // Left button (0) and middle button (1) start a pan. Right-click is
-      // suppressed at the element level so the context menu never appears
-      // over the canvas.
-      if (e.button !== 0 && e.button !== 1) return
+      // Left (0), middle (1), and right (2) button all start a pan — any
+      // mouse button held + drag moves the canvas. The context menu is
+      // suppressed separately on <main> so right-click doesn't pop it up.
+      if (e.button !== 0 && e.button !== 1 && e.button !== 2) return
       e.preventDefault()
       panStart.current = {
         panX: pan.x,
