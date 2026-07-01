@@ -20,6 +20,8 @@
     "make": "npm run build:renderer && electron-forge make"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/utilities": "^3.2.2",
     "corestore": "^7.9.1",
     "framed-stream": "^1.0.1",
     "framer-motion": "^12.0.0",

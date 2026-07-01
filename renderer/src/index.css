@@ -7,6 +7,7 @@
   --color-tamarind-700: #0e4f15;
   --color-tamarind-900: #052408;
   --font-display: 'Inter', system-ui, sans-serif;
+  --app-tagline: 'Tactical Whiteboard for Teams That Need to Win';
 }
 
 html,
@@ -15,4 +16,17 @@ body,
   height: 100%;
   margin: 0;
   font-family: var(--font-display);
+}
+
+@layer components {
+  /* Viewport reference dot grid. Lives on the surface <main> so it
+     stays fixed while the world (pitch + tokens) pans and zooms on
+     top. Matches tamaflow / my-doctor-ai canvas pattern: single
+     24px dot grid, light blue-gray background, no major lines. */
+  .canvas-grid {
+    background-color: #f8f8fc;
+    background-image: radial-gradient(circle, #d0d0e8 1px, transparent 1px);
+    background-size: 24px 24px;
+    background-position: 0 0;
+  }
 }
