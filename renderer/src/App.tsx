@@ -35,12 +35,14 @@ export function App() {
           role={room.role as RoomRole | null}
           invite={room.invite}
           writable={room.writable}
+          me={room.me}
           error={room.error ?? (status === 'error' ? 'Updater worker exited unexpectedly.' : null)}
           onOpenCanvas={() => {
             setHostDismissed(true)
             setPhase('canvas')
           }}
           onJoinInvite={room.joinInvite}
+          onRenameSelf={room.renameSelf}
         />
       ) : (
         <CanvasPage />

@@ -165,6 +165,18 @@ class TamarindRoomWorkerTask extends ReadyResource {
       case 'rename-self':
         this.identity.name = message.name || this.identity.name
         await this._persistIdentity()
+        // Re-push the `me` event so the renderer's `useRoom.me` updates
+        // and the splash's "Signed in as <name>" label reflects the
+        // rename immediately. Otherwise `me` stays at its boot-time
+        // value (the writer-pubkey-derived default) until the next
+        // worker restart.
+        this.pipe.write(
+          JSON.stringify({
+            type: 'me',
+            key: z32.encode(this.identity.key),
+            name: this.identity.name
+          })
+        )
         return
       default:
         return

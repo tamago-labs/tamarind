@@ -1,18 +1,25 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Check, Copy, Loader2, LogIn, Sparkles, X } from 'lucide-react'
-import type { RoomRole } from '../hooks/useRoom'
+import { Check, Copy, Loader2, LogIn, Pencil, Sparkles } from 'lucide-react'
+import type { Me, RoomRole } from '../hooks/useRoom'
+import { InviteJoinModal } from './InviteJoinModal'
+import { NameEditModal } from './NameEditModal'
 
 interface SplashPageProps {
   role: RoomRole | null
   invite: string | null
   writable: boolean
   error: string | null
+  me: Me | null
   onOpenCanvas: () => void
   // Switch host → guest mid-session. Triggers a worker restart in
   // main.js with `--invite <code>`; the splash stays mounted while the
   // new worker boots and the role flips to 'guest'.
   onJoinInvite: (invite: string) => void
+  // Per-session display-name change. Pipes to `bridge.writeRoom({type:
+  // 'rename-self', name})` in the worker; the worker re-emits `me` so
+  // the splash label updates without waiting for a snapshot.
+  onRenameSelf: (name: string) => void
 }
 
 export function SplashPage({
@@ -20,12 +27,14 @@ export function SplashPage({
   invite,
   writable,
   error,
+  me,
   onOpenCanvas,
-  onJoinInvite
+  onJoinInvite,
+  onRenameSelf
 }: SplashPageProps) {
   const [copied, setCopied] = useState(false)
   const [showJoin, setShowJoin] = useState(false)
-  const [joinCode, setJoinCode] = useState('')
+  const [showNameEdit, setShowNameEdit] = useState(false)
 
   function handleCopy() {
     if (!invite) return
@@ -37,17 +46,10 @@ export function SplashPage({
     }
   }
 
-  function handleJoinSubmit() {
-    const code = joinCode.trim()
-    if (!code) return
-    onJoinInvite(code)
-    // Keep the form mounted; the splash flips back to a starting spinner
-    // because `useRoom` resets the store on worker exit. The form is
-    // hidden by `showJoin` only when the user explicitly cancels.
-  }
-
   const ready = role !== null && writable
-  const joining = showJoin && (!ready || role === null)
+  // "joining" reflects an in-flight join attempt (modal submitted, worker
+  // not yet back). The splash spinner reads this to swap its copy.
+  const joining = !ready && showJoin && role === null
 
   return (
     <motion.div
@@ -73,12 +75,30 @@ export function SplashPage({
         </span>
       </motion.div>
 
+      {/* "Signed in as <name>" — clickable to open the name-edit modal.
+          Sits above the spinner / invite state so the user's identity is
+          visible from the moment the worker emits the `me` frame.
+          Hidden until that frame arrives (the name is unknown before
+          then, and the pencil affordance would be misleading). */}
+      {me && (
+        <button
+          type='button'
+          onClick={() => setShowNameEdit(true)}
+          aria-label='Change display name'
+          className='mt-6 inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white/80 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/30'
+        >
+          <span className='text-white/60'>Signed in as</span>
+          <span className='font-semibold text-white'>{me.name}</span>
+          <Pencil className='h-3 w-3 text-white/60' aria-hidden='true' />
+        </button>
+      )}
+
       {!ready && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4, duration: 0.4 }}
-          className='mt-10 flex items-center gap-3 text-sm text-white/80'
+          className='mt-6 flex items-center gap-3 text-sm text-white/80'
         >
           <Loader2 className='h-4 w-4 animate-spin text-tamarind-300' aria-hidden='true' />
           <span>
@@ -98,7 +118,7 @@ export function SplashPage({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: 'easeOut' }}
-          className='mt-10 flex flex-col items-center gap-4 px-6 text-center'
+          className='mt-6 flex flex-col items-center gap-4 px-6 text-center'
         >
           {role === 'host' && invite ? (
             <>
@@ -138,74 +158,39 @@ export function SplashPage({
 
       {/* "Join existing board" — always available so a second Tamarind
           instance can switch from default-host to guest without needing
-          to relaunch with `--invite` on the CLI. Toggling shows a paste
-          input; submitting triggers `bridge.joinWithInvite`, which kills
-          + respawns the room worker in main.js. */}
-      <div className='mt-8 flex flex-col items-center gap-2 px-6'>
-        {!showJoin ? (
-          <button
-            type='button'
-            onClick={() => setShowJoin(true)}
-            aria-label='Join existing board'
-            className='inline-flex items-center gap-1.5 rounded-md border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/30'
-          >
-            <LogIn className='h-3.5 w-3.5' aria-hidden='true' />
-            Join existing board
-          </button>
-        ) : (
-          <div className='flex w-full max-w-sm flex-col gap-2 rounded-md border border-white/20 bg-white/5 p-3 backdrop-blur'>
-            <label
-              htmlFor='splash-invite-input'
-              className='text-[11px] font-semibold uppercase tracking-wide text-white/70'
-            >
-              Paste invite code
-            </label>
-            <div className='flex items-center gap-2'>
-              <input
-                id='splash-invite-input'
-                type='text'
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    handleJoinSubmit()
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault()
-                    setShowJoin(false)
-                    setJoinCode('')
-                  }
-                }}
-                placeholder='e.g. yrya…'
-                spellCheck={false}
-                autoComplete='off'
-                aria-label='Invite code'
-                className='h-8 flex-1 rounded border border-white/20 bg-white/10 px-2 font-mono text-xs text-white placeholder-white/40 focus:border-white/40 focus:outline-none'
-              />
-              <button
-                type='button'
-                onClick={handleJoinSubmit}
-                disabled={!joinCode.trim() || joining}
-                aria-label='Join with invite code'
-                className='inline-flex h-8 items-center rounded-md bg-white px-3 text-xs font-semibold text-tamarind-700 transition hover:bg-white/90 focus:outline-none focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-50'
-              >
-                Join
-              </button>
-              <button
-                type='button'
-                onClick={() => {
-                  setShowJoin(false)
-                  setJoinCode('')
-                }}
-                aria-label='Cancel join'
-                className='inline-flex h-8 w-8 items-center justify-center rounded-md text-white/70 transition hover:bg-white/10'
-              >
-                <X className='h-3.5 w-3.5' aria-hidden='true' />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+          to relaunch with `--invite` on the CLI. The actual paste-and-
+          submit UX lives in the shared `InviteJoinModal` so other
+          surfaces (toolbar quick-join, future deep-link landing) can
+          reuse the same animated dialog. */}
+      <button
+        type='button'
+        onClick={() => setShowJoin(true)}
+        aria-label='Join existing board'
+        className='mt-6 inline-flex items-center gap-1.5 rounded-md border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/30'
+      >
+        <LogIn className='h-3.5 w-3.5' aria-hidden='true' />
+        Join existing board
+      </button>
+
+      <InviteJoinModal
+        open={showJoin}
+        onClose={() => setShowJoin(false)}
+        onSubmit={(code) => {
+          setShowJoin(false)
+          onJoinInvite(code)
+        }}
+        busy={joining}
+      />
+
+      <NameEditModal
+        open={showNameEdit}
+        currentName={me?.name ?? ''}
+        onClose={() => setShowNameEdit(false)}
+        onSubmit={(name) => {
+          onRenameSelf(name)
+          setShowNameEdit(false)
+        }}
+      />
     </motion.div>
   )
 }
