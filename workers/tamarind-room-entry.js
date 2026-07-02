@@ -111,6 +111,14 @@ class TamarindRoomWorkerTask extends ReadyResource {
     this.pipe.write(JSON.stringify({ type: 'role', role, writable: this.room.isWritable() }))
     this.pipe.write(JSON.stringify({ type: 'status', phase: 'ready' }))
 
+    // One-shot first-time bootstrap: seed an Untitled board if the
+    // Autobase is empty. This used to live in `_broadcast` but two
+    // concurrent broadcasts (one for `_open`, one for the bootstrap
+    // append's own `update` event) would both observe `boards.length
+    // === 0` and append duplicates. Lifting it to `_open` and gating
+    // with a flag keeps it strictly idempotent.
+    await this._ensureDefaultBoard()
+
     // Listen for renderer frames.
     this.pipe.on('data', (data) => {
       let message
@@ -152,6 +160,13 @@ class TamarindRoomWorkerTask extends ReadyResource {
           key: z32.encode(this.identity.key),
           at: Date.now()
         })
+        return
+      case 'remove-chats':
+        // Mirror the canvasReducer's split: ids=[] means "clear all",
+        // ids=[id1, ...] means delete those. Permission model is
+        // "if you can append, you can delete" — same as add-chat above.
+        if (!Array.isArray(message.ids)) return
+        await this.room.appendRemoveChats(message.ids)
         return
       case 'join-invite':
         // Joining after open is a no-op in v1 (a guest must restart
@@ -220,33 +235,10 @@ class TamarindRoomWorkerTask extends ReadyResource {
 
   async _broadcast() {
     try {
-      // First-time bootstrap: ensure at least one board exists. On an
-      // empty local Autobase (fresh host launch), the renderer's
-      // reducer starts with its own default 'Untitled' board; the
-      // snapshot we'd otherwise emit would be empty and override that
-      // local board, leaving the canvas permanently disabled. Seeding
-      // a default board here means the very first snapshot reflects a
-      // usable workspace.
       const boards = await this.room.getBoards()
       console.log(
         `[tamarind-room] _broadcast start (peers=${this.peers}, boards=${boards.length}, writable=${this.room.isWritable()})`
       )
-      if (boards.length === 0 && this.room.isWritable()) {
-        const b4a = require('b4a')
-        const now = Date.now()
-        const id = Buffer.alloc(16)
-        id.writeUInt32BE(now >>> 0, 12)
-        await this.room.appendBoard({
-          type: 'add-board',
-          board: {
-            id: b4a.toString(id, 'hex'),
-            name: 'Untitled',
-            createdAt: now,
-            updatedAt: now,
-            order: 0
-          }
-        })
-      }
       const [snapshot, messages] = await Promise.all([
         this.room.buildSnapshot(),
         this.room.getMessages()
@@ -264,6 +256,32 @@ class TamarindRoomWorkerTask extends ReadyResource {
     } catch (err) {
       this.pipe.write(JSON.stringify({ type: 'status', phase: 'error', error: err.message }))
     }
+  }
+
+  // One-shot: seed a single Untitled board the first time a host
+  // worker opens an empty Autobase. Gated by a flag so concurrent
+  // openings (multiple broadcasts of the same state) can't both append.
+  async _ensureDefaultBoard() {
+    if (this._defaultBoardBootstrapped) return
+    this._defaultBoardBootstrapped = true
+    if (!this.room.isWritable()) return
+    const existing = await this.room.getBoards()
+    if (existing.length > 0) return
+    const b4a = require('b4a')
+    const now = Date.now()
+    const id = Buffer.alloc(16)
+    id.writeUInt32BE(now >>> 0, 12)
+    console.log('[tamarind-room] seeding default Untitled board')
+    await this.room.appendBoard({
+      type: 'add-board',
+      board: {
+        id: b4a.toString(id, 'hex'),
+        name: 'Untitled',
+        createdAt: now,
+        updatedAt: now,
+        order: 0
+      }
+    })
   }
 
   _peers(delta) {

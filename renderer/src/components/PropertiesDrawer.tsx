@@ -21,6 +21,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { BoardScopedItem, LineCap } from '../canvas/types'
+import { useBlurHandler } from '../hooks/useBlur'
 
 interface PropertiesDrawerProps {
   selectedItem: BoardScopedItem | null
@@ -154,6 +155,7 @@ export function PropertiesDrawer({
 
       {(item.type === 'rect' || item.type === 'ellipse') && (
         <TextSection
+          key={id}
           item={item}
           onUpdate={onUpdate}
           onTransientUpdate={onTransientUpdate}
@@ -306,34 +308,81 @@ function TextSection({
   onTransientUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
   id: string
 }) {
-  if (item.type !== 'rect' && item.type !== 'ellipse') return null
-  // Local draft so we can dispatch transient updates per keystroke
-  // without flooding the history stack. The committed value syncs from
-  // `item.text` when external code (e.g. another peer) updates it.
+  // Controlled-commit model. Each keystroke updates local `draft` and fires a
+  // transient `update-item` (no history, no wire) so the canvas TextOverlay
+  // mirrors the draft live. The authoritative network commit lands on blur.
+  //
+  // The parent mounts this with `key={id}`, so switching shapes remounts a
+  // fresh instance seeded from the new item.text — no stale draft carries
+  // over between shapes. Commit runs through a *native* blur listener
+  // (useBlurHandler) rather than React's synthetic onBlur: when selecting a
+  // different shape unmounts this subtree, the native blur still fires
+  // synchronously during focus loss, before React tears the tree down.
   const [draft, setDraft] = useState(item.text ?? '')
-  const lastExternalRef = useRef(item.text ?? '')
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  const dirtyRef = useRef(false)
+  // Last authoritative text we synced from. Distinguishes our own transient-
+  // induced item.text moves from external changes (peer edit, snapshot).
+  const lastSeenRef = useRef(item.text ?? '')
+
+  const commit = () => {
+    if (!dirtyRef.current) return
+    dirtyRef.current = false
+    lastSeenRef.current = draftRef.current
+    onUpdate(id, { text: draftRef.current })
+  }
+  // Always fire the latest commit closure from the blur listener / unmount
+  // cleanup without re-attaching listeners on every render.
+  const commitRef = useRef(commit)
+  commitRef.current = commit
+  const blurRef = useBlurHandler(() => commitRef.current())
+
+  // Pull external changes only when there's no pending local edit. While
+  // dirty, the worker's snapshots keep reverting item.text to the last
+  // committed value; syncing here would wipe the in-progress draft and clear
+  // dirtyRef, so the pending edit would never commit on blur.
   useEffect(() => {
-    if (item.text !== lastExternalRef.current) {
-      lastExternalRef.current = item.text ?? ''
-      setDraft(item.text ?? '')
-    }
+    if (item.text === lastSeenRef.current) return
+    lastSeenRef.current = item.text ?? ''
+    if (dirtyRef.current) return
+    if (item.text !== draftRef.current) setDraft(item.text ?? '')
   }, [item.text])
+
+  // Safety net: commit a pending edit if the section unmounts (shape deleted,
+  // selection cleared) without a preceding blur. dirtyRef guards double-commit
+  // when blur already fired.
+  useEffect(() => {
+    return () => commitRef.current()
+  }, [])
+
   return (
     <div>
       <SectionTitle>Text</SectionTitle>
       <textarea
+        ref={blurRef}
         value={draft}
         onChange={(e) => {
           const next = e.target.value
           setDraft(next)
-          // Transient — the actual history entry lands on blur. Avoids
-          // one undo step per character for a 50-char note.
+          draftRef.current = next
+          dirtyRef.current = true
           onTransientUpdate(id, { text: next })
         }}
-        onBlur={() => {
-          if (draft !== (item.text ?? '')) {
-            lastExternalRef.current = draft
-            onUpdate(id, { text: draft })
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            // Enter commits; Shift+Enter inserts a newline.
+            e.preventDefault()
+            e.currentTarget.blur()
+          } else if (e.key === 'Escape') {
+            // Revert to the last authoritative text, then blur without commit.
+            e.preventDefault()
+            dirtyRef.current = false
+            const reverted = lastSeenRef.current
+            setDraft(reverted)
+            draftRef.current = reverted
+            onTransientUpdate(id, { text: reverted })
+            e.currentTarget.blur()
           }
         }}
         aria-label='Shape text'

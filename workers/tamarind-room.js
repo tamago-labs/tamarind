@@ -154,14 +154,19 @@ class TamarindRoom extends ReadyResource {
       const targetExists = existingBoards.some((b) => b4a.equals(b.id, data.id))
       if (!targetExists) return
       // Cascade-delete shapes on this board; mirrors the reducer's
-      // delete-board branch so peers converge identically.
+      // delete-board branch so peers converge identically. Pass the
+      // id wrapped in a query object — `view.delete(name, buffer)`
+      // routes through collection.encodeKey(buffer) which then does
+      // `buffer.id`, and Buffer has no .id field, so the call throws
+      // `Cannot read properties of undefined (reading 'buffer')` (see
+      // smoke stack at tamarind-room.js:161).
       const items = await context.view.find('@tamarind/items', {}).toArray()
       for (const item of items) {
         if (b4a.equals(item.boardId, data.id)) {
-          await context.view.delete('@tamarind/items', item.id)
+          await context.view.delete('@tamarind/items', { id: item.id })
         }
       }
-      await context.view.delete('@tamarind/boards', data.id)
+      await context.view.delete('@tamarind/boards', { id: data.id })
     })
 
     this.router.add('@tamarind/add-item', async (data, context) => {
@@ -192,16 +197,48 @@ class TamarindRoom extends ReadyResource {
       }))
     })
     this.router.add('@tamarind/remove-item', async (data, context) => {
-      await context.view.delete('@tamarind/items', data.id)
+      // `data.id` arrives as a Buffer from the `board-delete`/`item-remove`
+      // encoding (single buffer field). Pass `{id: buffer}` so the
+      // collection's encodeKey extracts `record.id` — passing the buffer
+      // bare routes through `buffer.id` which is undefined and throws
+      // "Cannot read properties of undefined (reading 'buffer')" inside
+      // the IndexEncoder preencode path.
+      await context.view.delete('@tamarind/items', { id: data.id })
     })
     this.router.add('@tamarind/remove-items', async (data, context) => {
+      // `data.ids` is json-encoded `string[]`. Items are keyed by Buffer,
+      // so each id has to be hex-decoded back into a Buffer before it
+      // can be matched against the index.
       for (const id of data.ids) {
-        await context.view.delete('@tamarind/items', id)
+        await context.view.delete('@tamarind/items', { id: hexId(id) })
       }
     })
 
     this.router.add('@tamarind/add-chat', async (data, context) => {
       await context.view.insert('@tamarind/chat', data)
+    })
+    this.router.add('@tamarind/remove-chats', async (data, context) => {
+      // Batch chat deletion. `data.ids` is a JSON array of message ids.
+      // An empty array means "clear all" — the worker walks the whole
+      // collection and deletes every message. Anything that isn't a
+      // string array is ignored (defensive — renderer validates but the
+      // worker shouldn't crash on malformed frames).
+      const ids = Array.isArray(data.ids) ? data.ids : null
+      if (ids === null) return
+      if (ids.length === 0) {
+        const all = await context.view.find('@tamarind/chat', {}).toArray()
+        for (const m of all) {
+          await context.view.delete('@tamarind/chat', { id: m.id })
+        }
+        return
+      }
+      // Specific ids — delete each. Missing ids are no-ops, matching
+      // the existing `remove-item`/`remove-items` semantics (peer may
+      // have already deleted via their own frame).
+      for (const id of ids) {
+        if (typeof id !== 'string') continue
+        await context.view.delete('@tamarind/chat', { id })
+      }
     })
   }
 
@@ -273,6 +310,16 @@ class TamarindRoom extends ReadyResource {
   async addMessage(text, info) {
     const id = Math.random().toString(16).slice(2)
     await this.base.append(TamarindDispatch.encode('@tamarind/add-chat', { id, text, info }))
+  }
+
+  // Per-message + clear-all chat deletion. Empty `ids` means "clear
+  // all". The router handler in `_setupRouter` does the actual work;
+  // this helper exists so the worker entry can fire the same encoded
+  // route that any other peer would emit.
+  async appendRemoveChats(ids) {
+    await this.base.append(
+      TamarindDispatch.encode('@tamarind/remove-chats', { ids: ids.slice() })
+    )
   }
 
   // Dispatch a single board action through the encoded route. Each

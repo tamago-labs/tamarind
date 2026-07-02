@@ -20,8 +20,9 @@ class Router {
     this._handler9 = null
     this._handler10 = null
     this._handler11 = null
+    this._handler12 = null
 
-    this._missing = 12
+    this._missing = 13
   }
 
   add (name, handler) {
@@ -62,6 +63,9 @@ class Router {
       case '@tamarind/add-chat':
         this._handler11 = handler
         break
+      case '@tamarind/remove-chats':
+        this._handler12 = handler
+        break
       default:
         throw DispatchError.NONEXISTENT_ROUTE(name)
     }
@@ -81,6 +85,7 @@ class Router {
     assert(this._handler9 !== null, 'Missing handler for "@tamarind/remove-item"')
     assert(this._handler10 !== null, 'Missing handler for "@tamarind/remove-items"')
     assert(this._handler11 !== null, 'Missing handler for "@tamarind/add-chat"')
+    assert(this._handler12 !== null, 'Missing handler for "@tamarind/remove-chats"')
   }
 
   async dispatch (message, context) {
@@ -117,6 +122,8 @@ class Router {
         return this._handler10(op.value, context)
       case 11:
         return this._handler11(op.value, context)
+      case 12:
+        return this._handler12(op.value, context)
       default:
         throw DispatchError.HANDLER_NOT_FOUND_BY_ID(op.id)
     }
@@ -222,6 +229,12 @@ const route11 = {
   enc: getEncoding('@tamarind/chat-msg')
 }
 
+const route12 = {
+  name: '@tamarind/remove-chats',
+  id: 12,
+  enc: getEncoding('@tamarind/chats-remove')
+}
+
 function getRouteByName (name) {
   switch (name) {
     case '@tamarind/add-writer':
@@ -248,6 +261,8 @@ function getRouteByName (name) {
       return route10
     case '@tamarind/add-chat':
       return route11
+    case '@tamarind/remove-chats':
+      return route12
     default:
       throw DispatchError.ROUTE_NOT_FOUND_BY_NAME(name)
   }
@@ -279,6 +294,8 @@ function getRouteById (id) {
       return route10
     case 11:
       return route11
+    case 12:
+      return route12
     default:
       throw DispatchError.HANDLER_NOT_FOUND_BY_ID(id)
   }

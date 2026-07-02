@@ -139,9 +139,30 @@ const subscribe = (cb: () => void) => {
 }
 const getSnapshot = () => store.version
 
+// Test hook — let CDP-driven smoke tests fire actions directly past the
+// UI guards. Mirrors the filter in `sendAction` so we send exactly the
+// same wire frames React does.
+export function dispatchActionForTest(action: Action): void {
+  if (
+    action.type === 'undo' ||
+    action.type === 'redo' ||
+    action.type === 'snapshot' ||
+    action.type === 'set-active' ||
+    action.type === 'reorder-boards'
+  ) {
+    return
+  }
+  if (action.type === 'update-item' && action.meta?.transient) return
+  writeRoom({ type: 'state-action', action }).catch((err) => {
+    console.error('[tamarind] dispatchActionForTest failed:', err)
+  })
+}
+
 export function useRoom(): RoomState & {
   sendAction: (action: Action) => void
   sendChat: (text: string) => void
+  removeChats: (ids: string[]) => void
+  clearChat: () => void
   joinInvite: (invite: string) => void
   createInvite: () => void
   renameSelf: (name: string) => void
@@ -196,6 +217,26 @@ export function useRoom(): RoomState & {
     })
   }, [])
 
+  // Per-message delete (ids = [one]) and bulk clear (ids = []). Both
+  // round-trip through the same `@tamarind/remove-chats` route; the
+  // worker interprets an empty `ids` array as "delete every chat row".
+  // Permission model mirrors `sendChat`: only writable peers can fire
+  // the frame (the worker enforces writability via `_onFrame` order — it
+  // never sees this frame when `writable` is false because the
+  // renderer's `useRoom` is the gate).
+  const removeChats = useCallback((ids: string[]) => {
+    if (!store.writable) return
+    writeRoom({ type: 'remove-chats', ids: ids.slice() }).catch((err) => {
+      console.error('[tamarind] removeChats failed:', err)
+    })
+  }, [])
+  const clearChat = useCallback(() => {
+    if (!store.writable) return
+    writeRoom({ type: 'remove-chats', ids: [] }).catch((err) => {
+      console.error('[tamarind] clearChat failed:', err)
+    })
+  }, [])
+
   const joinInvite = useCallback((invite: string) => {
     // Tells main.js to kill + respawn the room worker with `--invite
     // <code>`. The renderer doesn't wait — the worker exit / restart
@@ -230,6 +271,8 @@ export function useRoom(): RoomState & {
     error: store.error,
     sendAction,
     sendChat,
+    removeChats,
+    clearChat,
     joinInvite,
     createInvite,
     renameSelf

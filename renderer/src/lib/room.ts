@@ -15,6 +15,7 @@ export type RoomFrame =
   | { type: 'create-invite' }
   | { type: 'state-action'; action: Action }
   | { type: 'send-chat'; text: string }
+  | { type: 'remove-chats'; ids: string[] }
   | { type: 'rename-self'; name: string }
 
 // Inbound frames the worker pushes back. Discriminated by `type`.

@@ -26,6 +26,7 @@ import { withHistory, type HistoryState } from '../canvas/history'
 import {
   DEFAULT_BOARD_NAME,
   DEFAULT_FILL,
+  DEFAULT_NOTE_FONT_SIZE,
   DEFAULT_NOTE_TEXT,
   DEFAULT_SHAPE_SIZE,
   DEFAULT_STROKE,
@@ -107,8 +108,20 @@ export function CanvasPage() {
     // worker echoes our own writes.
     if (lastSnapshotRef.current === room.snapshot) return
     lastSnapshotRef.current = room.snapshot
-    const activeBoard: ActiveBoard | null = room.snapshot.activeBoardId
-      ? { key: 'current', boardId: room.snapshot.activeBoardId }
+    // Active-board selection is per-renderer UI state — the worker
+    // intentionally doesn't track it (it would force every peer onto
+    // the same board). Preserve the renderer's local `state.activeBoardId`
+    // when it's still a valid id in the snapshot's boards list, even if
+    // a transient snapshot arrives. Only fall back to the worker's
+    // suggestion when our current active board no longer exists (deleted)
+    // or we don't yet have one (first snapshot after boot).
+    const workerActive = room.snapshot.activeBoardId
+    const localActive = state.activeBoardId
+    const boardsHaveLocal =
+      localActive !== null && room.snapshot.boards.some((b) => b.id === localActive)
+    const effectiveActive = boardsHaveLocal ? localActive : workerActive
+    const activeBoard: ActiveBoard | null = effectiveActive
+      ? { key: 'current', boardId: effectiveActive }
       : null
     // Worker-decoded items already match BoardScopedItem for the
     // local reducer's purposes (ids are hex strings, connector
@@ -123,7 +136,7 @@ export function CanvasPage() {
       items: room.snapshot.items as unknown as BoardScopedItem[],
       activeBoard
     })
-  }, [room.snapshot, dispatch])
+  }, [room.snapshot, state.activeBoardId, dispatch])
 
   // Stable ref to `sendAction` so `dispatchAction` stays referentially
   // stable across renders (otherwise every room.snapshot would force
@@ -235,6 +248,7 @@ export function CanvasPage() {
             stroke: DEFAULT_STROKE,
             strokeWidth: DEFAULT_STROKE_WIDTH,
             text: DEFAULT_NOTE_TEXT,
+            fontSize: DEFAULT_NOTE_FONT_SIZE,
             order: 0,
             updatedAt: now
           }
@@ -803,6 +817,7 @@ export function CanvasPage() {
           ref={surfaceRef}
           onPointerDown={onSurfacePointerDown}
           onContextMenu={(e) => e.preventDefault()}
+          data-active-board-id={state.activeBoardId ?? ''}
           className='canvas-grid relative flex-1 select-none overflow-hidden'
           style={{ cursor: isPanning ? 'grabbing' : 'grab', touchAction: 'none' }}
         >
@@ -849,6 +864,8 @@ export function CanvasPage() {
               writable={room.writable}
               me={room.me}
               onSendChat={room.sendChat}
+              onRemoveChat={(id) => room.removeChats([id])}
+              onClearChat={room.clearChat}
               onCopyInvite={() => {
                 if (!room.invite) return
                 if (navigator.clipboard?.writeText) {

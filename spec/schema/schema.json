@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "schema": [
     {
       "name": "writer",
@@ -343,6 +343,20 @@
           "required": true,
           "type": "json",
           "version": 2
+        }
+      ]
+    },
+    {
+      "name": "chats-remove",
+      "namespace": "tamarind",
+      "compact": false,
+      "flagsPosition": -1,
+      "fields": [
+        {
+          "name": "ids",
+          "required": true,
+          "type": "json",
+          "version": 3
         }
       ]
     }

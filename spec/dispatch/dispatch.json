@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "offset": 0,
   "schema": [
     {
@@ -73,6 +73,12 @@
       "name": "@tamarind/add-chat",
       "requestType": "@tamarind/chat-msg",
       "version": 1
+    },
+    {
+      "id": 12,
+      "name": "@tamarind/remove-chats",
+      "requestType": "@tamarind/chats-remove",
+      "version": 2
     }
   ]
 }
