@@ -132,13 +132,27 @@ class TamarindRoom extends ReadyResource {
       await context.view.insert('@tamarind/boards', data)
     })
     this.router.add('@tamarind/rename-board', async (data, context) => {
-      await context.view.update('@tamarind/boards', { id: data.id }, (b) => ({
-        ...b,
-        name: data.name,
-        updatedAt: data.at
-      }))
+      // HyperDB has no `update` — get + delete + insert. Without this,
+      // the old `view.update` call silently treated the {id} arg as a
+      // bee.update(opts) and did nothing, so board renames appeared to
+      // succeed locally but never round-tripped through the autobase.
+      await applyUpdate(
+        context.view,
+        '@tamarind/boards',
+        { id: data.id },
+        (b) => ({ ...b, name: data.name, updatedAt: data.at })
+      )
     })
     this.router.add('@tamarind/delete-board', async (data, context) => {
+      // Last-board guard: refuse to delete the only remaining board.
+      // Mirrors the same guard in canvasReducer (renderer) and the
+      // BoardsMenu UI hide. Without this a peer's stray delete-board
+      // could empty the autobase and leave every peer without an
+      // active board on the next snapshot.
+      const existingBoards = await context.view.find('@tamarind/boards', {}).toArray()
+      if (existingBoards.length <= 1) return
+      const targetExists = existingBoards.some((b) => b4a.equals(b.id, data.id))
+      if (!targetExists) return
       // Cascade-delete shapes on this board; mirrors the reducer's
       // delete-board branch so peers converge identically.
       const items = await context.view.find('@tamarind/items', {}).toArray()
@@ -161,17 +175,17 @@ class TamarindRoom extends ReadyResource {
     })
     this.router.add('@tamarind/update-item', async (data, context) => {
       // `data.patch` is JSON; the reducer expects Partial<BoardScopedItem>.
-      await context.view.update('@tamarind/items', { id: data.id }, (existing) => {
-        // Merge JSON-encoded connector endpoints if patched.
-        const merged = { ...existing, ...data.patch, updatedAt: data.at }
-        if (typeof existing.start === 'string' && typeof merged.start === 'string') {
-          // keep as-is; the snapshot decoder parses
-        }
-        return merged
-      })
+      // Connector endpoints (`start`, `end`) come from the renderer as
+      // parsed objects — they need to be re-stringified before insert so
+      // the schema's string-encoded fields stay consistent across peers.
+      await applyUpdate(context.view, '@tamarind/items', { id: data.id }, (existing) => ({
+        ...existing,
+        ...data.patch,
+        updatedAt: data.at
+      }))
     })
     this.router.add('@tamarind/reorder', async (data, context) => {
-      await context.view.update('@tamarind/items', { id: data.id }, (existing) => ({
+      await applyUpdate(context.view, '@tamarind/items', { id: data.id }, (existing) => ({
         ...existing,
         order: data.order,
         updatedAt: data.at
@@ -344,6 +358,34 @@ class TamarindRoom extends ReadyResource {
 // robust to whichever id scheme the renderer chooses.
 function hexId(s) {
   return b4a.from(String(s).replace(/-/g, ''), 'hex')
+}
+
+// HyperDB doesn't expose an `update(collection, query, mutator)` API —
+// only `get`, `insert`, `delete`. Earlier code in this file called
+// `view.update(...)` expecting an updater callback, but Bee.update()
+// treats its first arg as a core refresh options object and silently
+// does nothing. That made board renames, item edits, and item reorders
+// appear to succeed locally while never round-tripping through the
+// Autobase — every snapshot echoed back stale data and reverted the
+// renderer's optimistic update.
+//
+// Apply the same effect via get → mutate → delete → insert. Connector
+// endpoints (`start`, `end`) are stored as JSON strings on the wire
+// because hyperschema lacks a v1 any-of; the renderer hands us the
+// parsed object, so re-stringify before re-insert.
+async function applyUpdate(view, collectionName, query, mutate) {
+  const existing = await view.get(collectionName, query)
+  if (!existing) return
+  const next = mutate(existing)
+  if (next === null || next === undefined) return
+  for (const key of ['start', 'end']) {
+    const v = next[key]
+    if (v !== undefined && v !== null && typeof v !== 'string') {
+      next[key] = JSON.stringify(v)
+    }
+  }
+  await view.delete(collectionName, query)
+  await view.insert(collectionName, next)
 }
 
 // Hex-encode the string ids into buffers for hyperschema records.

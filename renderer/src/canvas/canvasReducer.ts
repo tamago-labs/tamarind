@@ -123,6 +123,16 @@ export function canvasReducer(state: CanvasState, action: Action): CanvasState {
     }
 
     case 'delete-board': {
+      // No-op when the board doesn't exist locally — peer-authored
+      // delete-board frames that race with our own snapshot are
+      // already filtered by this guard before we waste a render.
+      if (!state.boards.some((b) => b.id === action.id)) return state
+      // Never let the state drop below 1 board. The UI hides the
+      // delete button when length<=1 (BoardsMenu), but a stale local
+      // action or a peer-pushed delete-board targeting our only
+      // board would still empty the boards array and leave the canvas
+      // with no active board. Drop the action in that case.
+      if (state.boards.length <= 1) return state
       const boards = state.boards.filter((b) => b.id !== action.id)
       const items: Record<string, BoardScopedItem> = {}
       for (const [id, item] of Object.entries(state.items)) {
