@@ -133,6 +133,15 @@ schema.register({
   fields: [{ name: 'ids', type: 'json', required: true }]
 })
 
+// Batch chat deletion — `ids` is a `string[]` of message ids to remove.
+// An empty array means "clear all chat history". Mirrors the
+// `items-remove` batch pattern; hyperschema doesn't do arrays-of-named-
+// record for v1, so we serialise the batch as JSON.
+schema.register({
+  name: 'chats-remove',
+  fields: [{ name: 'ids', type: 'json', required: true }]
+})
+
 Hyperschema.toDisk(hyperSchema)
 
 // ── Collections ─────────────────────────────────────────────────────
@@ -185,5 +194,6 @@ dispatch.register({ name: 'remove-item', requestType: '@tamarind/item-remove' })
 dispatch.register({ name: 'remove-items', requestType: '@tamarind/items-remove' })
 
 dispatch.register({ name: 'add-chat', requestType: '@tamarind/chat-msg' })
+dispatch.register({ name: 'remove-chats', requestType: '@tamarind/chats-remove' })
 
 Hyperdispatch.toDisk(hyperdispatch)
