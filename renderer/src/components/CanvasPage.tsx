@@ -54,6 +54,7 @@ import { CanvasToolbar, type SelectedTool } from './CanvasToolbar'
 import { PropertiesDrawer } from './PropertiesDrawer'
 import { GroupChatPanel } from './GroupChatPanel'
 import { TemplatesModal } from './TemplatesModal'
+import { BoardBackupError, buildBackupFilename, parseBackup, serializeBoard } from '../data/boardIO'
 
 const MIN_SHAPE_SIZE = 20
 
@@ -960,6 +961,123 @@ export function CanvasPage() {
     [state.activeBoardId, dispatchAction]
   )
 
+  // ── Backup / Restore (board file v1, JSON) ─────────────────────
+  //
+  // Backup writes the active board's items to a `Tamarind board file
+  // v1` JSON document and triggers a download via the renderer Blob
+  // + anchor dance. Restore opens a file picker, reads the file,
+  // parses + validates it, and dispatches a single `add-items` for
+  // the recovered shapes with fresh ids + the active boardId.
+  //
+  // Restore re-stamps every item (ids + boardId) before dispatch, so
+  // a backup from a different room doesn't collide with the local
+  // item namespace. The restored shapes land on the active board;
+  // the backup's original board metadata is preserved in the file
+  // but not applied as a rename — auto-rename would surprise users
+  // who expect Restore to be additive. (The `parsed.name` is still
+  // available for a future "Restore as new board" button.)
+  const [restoreBanner, setRestoreBanner] = useState<{
+    kind: 'success' | 'error'
+    message: string
+  } | null>(null)
+
+  const handleBackup = useCallback(() => {
+    if (!state.activeBoardId) return
+    const board = state.boards.find((b) => b.id === state.activeBoardId)
+    if (!board) return
+    const items = itemsArray.filter((it) => it.boardId === state.activeBoardId)
+    const text = serializeBoard(board, items, Date.now())
+    const filename = buildBackupFilename(board)
+    // Renders the Blob + anchor download. `URL.createObjectURL` is
+    // paired with `revokeObjectURL` on the next macrotask to avoid
+    // revoking before the browser reads the URL.
+    const blob = new Blob([text], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+    setRestoreBanner({
+      kind: 'success',
+      message: `Backed up "${board.name}" (${items.length} item${items.length === 1 ? '' : 's'})`
+    })
+  }, [state.activeBoardId, state.boards, itemsArray])
+
+  const handleRestore = useCallback(() => {
+    // Hidden <input> + `.click()` is the only cross-platform way to
+    // open a native file picker from a button onClick. The input is
+    // detached after the user picks (or cancels) so it doesn't
+    // accumulate in the DOM.
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json,.tamarind.json,application/json'
+    input.style.display = 'none'
+    input.onchange = () => {
+      const file = input.files?.[0]
+      input.remove()
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = () => {
+        const text = String(reader.result ?? '')
+        try {
+          const parsed = parseBackup(text)
+          if (!state.activeBoardId) {
+            setRestoreBanner({ kind: 'error', message: 'No active board to restore into' })
+            return
+          }
+          if (parsed.items.length === 0) {
+            setRestoreBanner({
+              kind: 'error',
+              message: `Backup "${parsed.name}" has no items to restore`
+            })
+            return
+          }
+          const now = Date.now()
+          const stamped = parsed.items.map((it) => ({
+            ...it,
+            id: uid(),
+            boardId: state.activeBoardId!,
+            updatedAt: now,
+            order: 0
+          }))
+          dispatchAction({ type: 'add-items', items: stamped, at: now })
+          setSelectedIds(new Set(stamped.map((it) => it.id)))
+          setRestoreBanner({
+            kind: 'success',
+            message: `Restored ${stamped.length} item${stamped.length === 1 ? '' : 's'} from "${parsed.name}"`
+          })
+        } catch (e) {
+          const message =
+            e instanceof BoardBackupError
+              ? e.message
+              : e instanceof Error
+                ? `Failed to restore: ${e.message}`
+                : 'Failed to restore backup'
+          setRestoreBanner({ kind: 'error', message })
+        }
+      }
+      reader.onerror = () => {
+        input.remove()
+        setRestoreBanner({ kind: 'error', message: 'Could not read the selected file' })
+      }
+      reader.readAsText(file)
+    }
+    document.body.appendChild(input)
+    input.click()
+  }, [state.activeBoardId, dispatchAction])
+
+  // Auto-dismiss the banner after 4s. Cleared on unmount + when a new
+  // banner replaces it (the effect re-arms for each `restoreBanner`
+  // identity change).
+  useEffect(() => {
+    if (!restoreBanner) return
+    const t = setTimeout(() => setRestoreBanner(null), 4000)
+    return () => clearTimeout(t)
+  }, [restoreBanner])
+
   // Keyboard shortcuts. One window-level keydown listener. Native event
   // capture isn't used: each handler reads state via refs/memos and
   // short-circuits when focus is in an input/textarea/contentEditable
@@ -1110,7 +1228,31 @@ export function CanvasPage() {
         onRenameBoard={handleRenameBoard}
         onDeleteBoard={handleDeleteBoard}
         onOpenTemplates={() => setTemplatesOpen(true)}
+        canBackup={state.activeBoardId !== null}
+        canRestore={state.activeBoardId !== null}
+        onBackup={handleBackup}
+        onRestore={handleRestore}
       />
+      {restoreBanner && (
+        <div
+          role='status'
+          className={
+            restoreBanner.kind === 'success'
+              ? 'flex items-center justify-center border-b border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800'
+              : 'flex items-center justify-center border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800'
+          }
+        >
+          <span>{restoreBanner.message}</span>
+          <button
+            type='button'
+            onClick={() => setRestoreBanner(null)}
+            aria-label='Dismiss'
+            className='ml-3 rounded-md px-2 py-0.5 text-xs font-medium hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-blue-500'
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div className='flex flex-1 flex-row overflow-hidden'>
         <main
           ref={surfaceRef}

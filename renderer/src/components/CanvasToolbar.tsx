@@ -64,6 +64,15 @@ interface CanvasToolbarProps {
   onRenameBoard: (id: string, name: string) => void
   onDeleteBoard: (id: string) => void
   onOpenTemplates: () => void
+  // Backup writes the active board to a Tamarind board file (kind:
+  // 'tamarind-board', v1) and triggers a download via the renderer's
+  // Blob/anchor dance — see `CanvasPage.handleBackup`. Restore opens
+  // a file picker, parses the backup, and dispatches `add-items` for
+  // the recovered shapes onto the active board.
+  canBackup: boolean
+  canRestore: boolean
+  onBackup: () => void
+  onRestore: () => void
 }
 
 const SHORTCUT_HINT = 'Cmd/Ctrl+Z to undo · Cmd/Ctrl+Shift+Z to redo · Cmd/Ctrl+A to select all'
@@ -199,7 +208,11 @@ export function CanvasToolbar({
   onAddBoard,
   onRenameBoard,
   onDeleteBoard,
-  onOpenTemplates
+  onOpenTemplates,
+  canBackup,
+  canRestore,
+  onBackup,
+  onRestore
 }: CanvasToolbarProps) {
   return (
     <header
@@ -277,6 +290,34 @@ export function CanvasToolbar({
           className='inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-gray-700 transition hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500'
         >
           Templates
+        </button>
+
+        <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
+
+        {/* Backup / Restore. Backup is gated on having an active board
+           (always true after bootstrap, but defensively disabled until
+           the worker snapshot lands). Restore is always available — the
+           file picker is cheap; the file's contents decide whether
+           anything gets dispatched. */}
+        <button
+          type='button'
+          onClick={onBackup}
+          disabled={!canBackup}
+          aria-label='Backup board to file'
+          title='Backup board to file'
+          className='inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-gray-700 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-300 disabled:hover:bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500'
+        >
+          Backup
+        </button>
+        <button
+          type='button'
+          onClick={onRestore}
+          disabled={!canRestore}
+          aria-label='Restore board from file'
+          title='Restore board from file'
+          className='inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-gray-700 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-300 disabled:hover:bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500'
+        >
+          Restore
         </button>
 
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
