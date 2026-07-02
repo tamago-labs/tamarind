@@ -24,6 +24,7 @@
 import { useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { BoardScopedItem, ConnectorEnd, Port } from './types'
+import { findNearestPort } from './findPort'
 import { SELECT_STROKE, getPortWorld, isConnector, resolveEnd } from './types'
 
 interface ConnectorHandlesProps {
@@ -241,27 +242,8 @@ function clientToWorld(
   }
 }
 
-// Find the nearest snap port within `radiusWorld` of `cursor`. Excludes
-// the connector itself; every other shape's five ports are candidates.
-function findNearestPort(
-  cursor: { x: number; y: number },
-  selfId: string,
-  itemsById: Record<string, BoardScopedItem>,
-  radiusWorld: number
-): { itemId: string; port: Port } | null {
-  let best: { itemId: string; port: Port; d: number } | null = null
-  for (const item of Object.values(itemsById)) {
-    if (item.id === selfId) continue
-    if (item.type === 'line' || item.type === 'arrow') continue
-    if (item.w === undefined || item.h === undefined) continue
-    for (const port of ['top', 'right', 'bottom', 'left', 'center'] as Port[]) {
-      const p = getPortWorld(item, port)
-      const d = Math.hypot(p.x - cursor.x, p.y - cursor.y)
-      if (d <= radiusWorld && (best === null || d < best.d)) {
-        best = { itemId: item.id, port, d }
-      }
-    }
-  }
-  if (!best) return null
-  return { itemId: best.itemId, port: best.port }
-}
+// findNearestPort is imported from `./findPort` (see top of file) so
+// the CanvasPage drag-to-create flow can reuse the same algorithm.
+// The constants `HANDLE_RADIUS` / `SNAP_RADIUS_PX` / `DETACH_DEADBAND_PX`
+// at the top of this file drive the snap math; keep them in sync with
+// any consumer that needs the same values.

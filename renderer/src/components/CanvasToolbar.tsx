@@ -14,12 +14,10 @@
 // with text labels rather than glyphs that read as "up/down arrows".
 
 import {
-  ArrowRight,
   Circle,
-  LayoutTemplate,
   MousePointerSquareDashed,
-  Minus,
   Redo2,
+  Spline,
   Square,
   Trash2,
   Type,
@@ -29,6 +27,12 @@ import {
 } from 'lucide-react'
 import type { Board, GenericShapeType } from '../canvas/types'
 import { BoardsMenu } from './BoardsMenu'
+
+// Phase 3 tool state. The connector uses a different interaction model
+// (click + drag to draw with snap) so it lives in its own state slot
+// separate from the "instant add" tools that just spawn-at-position.
+export type ConnectorTool = 'connector'
+export type SelectedTool = ConnectorTool | null
 
 interface CanvasToolbarProps {
   zoom: number
@@ -44,6 +48,12 @@ interface CanvasToolbarProps {
   onZoomOut: () => void
   onResetZoom: () => void
   onAddShape: (type: GenericShapeType) => void
+  // Phase 3: connector uses a drag-to-create flow with snap-to-port
+  // rather than spawning a 200-unit line at the cursor. The toolbar
+  // tells the page to enter that mode; the page owns the pointer
+  // handlers. `null` clears the mode.
+  selectedTool: SelectedTool
+  onSelectTool: (tool: SelectedTool) => void
   onDelete: () => void
   onUndo: () => void
   onRedo: () => void
@@ -130,11 +140,17 @@ function MomentaryButton({
 function ShapeButton({
   label,
   onClick,
-  children
+  children,
+  active
 }: {
   label: string
   onClick: () => void
   children: React.ReactNode
+  // When true, the button is styled as the currently-selected tool
+  // (blue background + blue text) so the user has a visual confirmation
+  // that the toolbar is in a non-default mode. Used by the connector
+  // button to indicate "you're in draw mode".
+  active?: boolean
 }) {
   return (
     <button
@@ -142,7 +158,12 @@ function ShapeButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className='inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-700 transition hover:bg-gray-200'
+      aria-pressed={active}
+      className={
+        active
+          ? 'inline-flex h-8 w-8 items-center justify-center rounded-md bg-blue-100 text-blue-700 transition hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500'
+          : 'inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-700 transition hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500'
+      }
     >
       {children}
     </button>
@@ -167,6 +188,8 @@ export function CanvasToolbar({
   onZoomOut,
   onResetZoom,
   onAddShape,
+  selectedTool,
+  onSelectTool,
   onDelete,
   onUndo,
   onRedo,
@@ -232,11 +255,12 @@ export function CanvasToolbar({
         <ShapeButton label='Add ellipse' onClick={() => onAddShape('ellipse')}>
           <Circle className='h-4 w-4' aria-hidden='true' />
         </ShapeButton>
-        <ShapeButton label='Add line' onClick={() => onAddShape('line')}>
-          <Minus className='h-4 w-4' aria-hidden='true' />
-        </ShapeButton>
-        <ShapeButton label='Add arrow' onClick={() => onAddShape('arrow')}>
-          <ArrowRight className='h-4 w-4' aria-hidden='true' />
+        <ShapeButton
+          label='Add connector'
+          active={selectedTool === 'connector'}
+          onClick={() => onSelectTool(selectedTool === 'connector' ? null : 'connector')}
+        >
+          <Spline className='h-4 w-4' aria-hidden='true' />
         </ShapeButton>
         <ShapeButton label='Add text' onClick={() => onAddShape('text')}>
           <Type className='h-4 w-4' aria-hidden='true' />
@@ -245,9 +269,15 @@ export function CanvasToolbar({
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 
         {/* Templates */}
-        <ShapeButton label='Templates' onClick={onOpenTemplates}>
-          <LayoutTemplate className='h-4 w-4' aria-hidden='true' />
-        </ShapeButton>
+        <button
+          type='button'
+          onClick={onOpenTemplates}
+          aria-label='Templates'
+          title='Templates'
+          className='inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-gray-700 transition hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500'
+        >
+          Templates
+        </button>
 
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 

@@ -163,8 +163,13 @@ export function PropertiesDrawer({
         />
       )}
 
-      {(item.type === 'line' || item.type === 'arrow') && (
-        <LineSection item={item} onUpdate={onUpdate} id={id} />
+      {item.type === 'connector' && (
+        <ConnectorSection
+          item={item}
+          onUpdate={onUpdate}
+          onTransientUpdate={onTransientUpdate}
+          id={id}
+        />
       )}
     </aside>
   )
@@ -406,23 +411,114 @@ function TextSection({
   )
 }
 
-function LineSection({
+function ConnectorSection({
   item,
   onUpdate,
+  onTransientUpdate,
   id
 }: {
   item: BoardScopedItem
   onUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
+  onTransientUpdate: (id: string, patch: Partial<BoardScopedItem>) => void
   id: string
 }) {
-  if (item.type !== 'line' && item.type !== 'arrow') return null
-  const value: LineCap = item.lineCap ?? 'round'
+  if (item.type !== 'connector') return null
+  const cap: LineCap = item.lineCap ?? 'round'
+  // The label uses the same controlled-commit pattern as TextSection —
+  // every keystroke fires a transient update so the canvas chip mirrors
+  // the draft live, then blur / Enter commits the authoritative value.
+  const [draft, setDraft] = useState(item.label?.text ?? '')
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  const dirtyRef = useRef(false)
+  const lastSeenRef = useRef(item.label?.text ?? '')
+
+  const commit = () => {
+    if (!dirtyRef.current) return
+    dirtyRef.current = false
+    lastSeenRef.current = draftRef.current
+    const text = draftRef.current
+    if (text === '') {
+      // Empty string clears the label entirely.
+      onUpdate(id, { label: undefined })
+    } else {
+      onUpdate(id, {
+        label: {
+          text,
+          at: item.label?.at ?? 'middle'
+        }
+      })
+    }
+  }
+  const commitRef = useRef(commit)
+  commitRef.current = commit
+  const blurRef = useBlurHandler(() => commitRef.current())
+
+  useEffect(() => {
+    const seen = item.label?.text ?? ''
+    if (seen === lastSeenRef.current) return
+    lastSeenRef.current = seen
+    if (dirtyRef.current) return
+    if (seen !== draftRef.current) setDraft(seen)
+  }, [item.label?.text])
+
+  useEffect(() => {
+    return () => commitRef.current()
+  }, [])
+
   return (
     <div>
-      <SectionTitle>Line</SectionTitle>
+      <SectionTitle>Connector</SectionTitle>
+      <Field label='Start'>
+        <select
+          value={item.arrowStart ?? 'none'}
+          onChange={(e) => onUpdate(id, { arrowStart: e.target.value as 'none' | 'arrow' })}
+          aria-label='Start arrowhead'
+          className='h-7 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-800 focus:border-tamarind-500 focus:outline-none'
+        >
+          <option value='none'>None</option>
+          <option value='arrow'>Arrow</option>
+        </select>
+      </Field>
+      <Field label='End'>
+        <select
+          value={item.arrowEnd ?? 'arrow'}
+          onChange={(e) => onUpdate(id, { arrowEnd: e.target.value as 'none' | 'arrow' })}
+          aria-label='End arrowhead'
+          className='h-7 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-800 focus:border-tamarind-500 focus:outline-none'
+        >
+          <option value='none'>None</option>
+          <option value='arrow'>Arrow</option>
+        </select>
+      </Field>
+      <Field label='Style'>
+        <select
+          value={item.strokePattern ?? 'solid'}
+          onChange={(e) =>
+            onUpdate(id, { strokePattern: e.target.value as 'solid' | 'dashed' | 'dotted' })
+          }
+          aria-label='Stroke pattern'
+          className='h-7 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-800 focus:border-tamarind-500 focus:outline-none'
+        >
+          <option value='solid'>Solid</option>
+          <option value='dashed'>Dashed</option>
+          <option value='dotted'>Dotted</option>
+        </select>
+      </Field>
+      <Field label='Curve'>
+        <select
+          value={item.curve ?? 'straight'}
+          onChange={(e) => onUpdate(id, { curve: e.target.value as 'straight' | 'bezier' })}
+          aria-label='Curve'
+          className='h-7 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-800 focus:border-tamarind-500 focus:outline-none'
+        >
+          <option value='straight'>Straight</option>
+          <option value='bezier'>Bezier</option>
+        </select>
+      </Field>
       <Field label='Cap'>
         <select
-          value={value}
+          value={cap}
           onChange={(e) => onUpdate(id, { lineCap: e.target.value as LineCap })}
           aria-label='Line cap'
           className='h-7 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-800 focus:border-tamarind-500 focus:outline-none'
@@ -430,6 +526,57 @@ function LineSection({
           <option value='round'>Round</option>
           <option value='butt'>Butt</option>
           <option value='square'>Square</option>
+        </select>
+      </Field>
+      <p className='mb-1 text-[10px] uppercase tracking-wide text-gray-500'>Label</p>
+      <input
+        ref={blurRef}
+        value={draft}
+        onChange={(e) => {
+          const next = e.target.value
+          setDraft(next)
+          draftRef.current = next
+          dirtyRef.current = true
+          // Live transient patch so the on-canvas chip updates as the
+          // user types.
+          onTransientUpdate(id, {
+            label: { text: next, at: item.label?.at ?? 'middle' }
+          })
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            e.currentTarget.blur()
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            dirtyRef.current = false
+            const reverted = lastSeenRef.current
+            setDraft(reverted)
+            draftRef.current = reverted
+            onTransientUpdate(id, {
+              label: reverted ? { text: reverted, at: item.label?.at ?? 'middle' } : undefined
+            })
+            e.currentTarget.blur()
+          }
+        }}
+        placeholder='e.g. pass'
+        aria-label='Connector label text'
+        className='mb-2 h-7 w-full rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-800 focus:border-tamarind-500 focus:outline-none'
+      />
+      <Field label='Position'>
+        <select
+          value={item.label?.at ?? 'middle'}
+          onChange={(e) => {
+            const at = e.target.value as 'start' | 'middle' | 'end'
+            const text = item.label?.text ?? draft
+            onUpdate(id, text ? { label: { text, at } } : { label: undefined })
+          }}
+          aria-label='Label position'
+          className='h-7 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-800 focus:border-tamarind-500 focus:outline-none'
+        >
+          <option value='start'>Start</option>
+          <option value='middle'>Middle</option>
+          <option value='end'>End</option>
         </select>
       </Field>
     </div>

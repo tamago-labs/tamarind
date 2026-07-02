@@ -72,7 +72,7 @@ function cascadeWithResolvedCoords(
   let mutated = false
   const next: Record<string, BoardScopedItem> = {}
   for (const [id, item] of Object.entries(items)) {
-    if (item.type !== 'line' && item.type !== 'arrow') {
+    if (item.type !== 'connector') {
       next[id] = item
       continue
     }

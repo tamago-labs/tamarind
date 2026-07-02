@@ -428,15 +428,16 @@ function hexId(s) {
 // renderer's optimistic update.
 //
 // Apply the same effect via get → mutate → delete → insert. Connector
-// endpoints (`start`, `end`) are stored as JSON strings on the wire
-// because hyperschema lacks a v1 any-of; the renderer hands us the
-// parsed object, so re-stringify before re-insert.
+// endpoints (`start`, `end`) and connector labels (`label`) are stored
+// as JSON strings on the wire because hyperschema lacks a v1 any-of;
+// the renderer hands us the parsed object, so re-stringify before
+// re-insert.
 async function applyUpdate(view, collectionName, query, mutate) {
   const existing = await view.get(collectionName, query)
   if (!existing) return
   const next = mutate(existing)
   if (next === null || next === undefined) return
-  for (const key of ['start', 'end']) {
+  for (const key of ['start', 'end', 'label']) {
     const v = next[key]
     if (v !== undefined && v !== null && typeof v !== 'string') {
       next[key] = JSON.stringify(v)
@@ -478,11 +479,19 @@ function encodeItem(it) {
   // Connector endpoints: serialise the ConnectorEnd union as JSON.
   if (it.start !== undefined) encoded.start = JSON.stringify(it.start)
   if (it.end !== undefined) encoded.end = JSON.stringify(it.end)
+  // Phase 3 connector styling — string fields are passed through as-is;
+  // `label` is a structured object so it rides the same JSON workaround
+  // as `start` / `end`.
+  if (it.arrowStart !== undefined) encoded.arrowStart = it.arrowStart
+  if (it.arrowEnd !== undefined) encoded.arrowEnd = it.arrowEnd
+  if (it.strokePattern !== undefined) encoded.strokePattern = it.strokePattern
+  if (it.curve !== undefined) encoded.curve = it.curve
+  if (it.label !== undefined) encoded.label = JSON.stringify(it.label)
   return encoded
 }
 
 // Reverse the above for the renderer's snapshot path. Buffers → hex;
-// JSON-string connector endpoints → parsed objects.
+// JSON-string connector endpoints + labels → parsed objects.
 function decodeItem(raw) {
   const item = {
     id: b4a.toString(raw.id, 'hex'),
@@ -513,6 +522,17 @@ function decodeItem(raw) {
       item.end = typeof raw.end === 'string' ? JSON.parse(raw.end) : raw.end
     } catch {
       item.end = undefined
+    }
+  }
+  if (raw.arrowStart !== undefined && raw.arrowStart !== null) item.arrowStart = raw.arrowStart
+  if (raw.arrowEnd !== undefined && raw.arrowEnd !== null) item.arrowEnd = raw.arrowEnd
+  if (raw.strokePattern !== undefined && raw.strokePattern !== null) item.strokePattern = raw.strokePattern
+  if (raw.curve !== undefined && raw.curve !== null) item.curve = raw.curve
+  if (raw.label !== undefined && raw.label !== null) {
+    try {
+      item.label = typeof raw.label === 'string' ? JSON.parse(raw.label) : raw.label
+    } catch {
+      item.label = undefined
     }
   }
   return item

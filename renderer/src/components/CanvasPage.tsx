@@ -33,6 +33,7 @@ import {
   DEFAULT_STROKE_WIDTH,
   DEFAULT_TEXT_FONT_SIZE,
   DEFAULT_TEXT_SIZE,
+  computeBoundingBox,
   getPortWorld,
   isConnector,
   type ActiveBoard,
@@ -45,14 +46,26 @@ import {
 import { uid } from '../canvas/id'
 import { computeDragPatch, computeMultiDragPatch } from '../canvas/drag'
 import { CanvasItems } from '../canvas/CanvasItems'
+import { CanvasOverlay, type DraftConnector } from '../canvas/CanvasOverlay'
+import { findNearestPort } from '../canvas/findPort'
 import { Marquee } from '../canvas/Marquee'
 import { CanvasFooter } from './CanvasFooter'
-import { CanvasToolbar } from './CanvasToolbar'
+import { CanvasToolbar, type SelectedTool } from './CanvasToolbar'
 import { PropertiesDrawer } from './PropertiesDrawer'
 import { GroupChatPanel } from './GroupChatPanel'
 import { TemplatesModal } from './TemplatesModal'
 
 const MIN_SHAPE_SIZE = 20
+
+// Snap radius for the connector draw flow. Same screen-pixel value as
+// the existing `ConnectorHandles` so the two paths feel identical;
+// `clientToWorld` divides by zoom to convert to world units.
+const CONNECTOR_SNAP_RADIUS_PX = 30
+// Minimum distance (world units) the cursor must travel between
+// pointerdown and pointerup to count as a "draw" rather than a click.
+// Clicks without movement drop the draft without committing — keeps
+// the canvas free of 0-length connectors from accidental clicks.
+const CONNECTOR_MIN_DRAG_DISTANCE = 8
 
 function makeInitialCanvasState(): CanvasState {
   const now = Date.now()
@@ -79,6 +92,7 @@ function makeInitialHistoryState(): HistoryState {
 export function CanvasPage() {
   const {
     zoom,
+    pan,
     isPanning,
     surfaceRef,
     worldTransform,
@@ -177,7 +191,32 @@ export function CanvasPage() {
   // handle the marquee tool.
   const [marqueeMode, setMarqueeMode] = useState(false)
   const marqueeModeRef = useRef(false)
+
+  // Phase 3: connector draw mode. The toolbar's Connector button flips
+  // this; the canvas surface then intercepts pointerdown to start a
+  // drag-to-create flow with snap-to-port. The local state is purely
+  // UI — nothing here is dispatched to the worker until pointerup
+  // commits a real `add-item` action.
+  const [selectedTool, setSelectedTool] = useState<SelectedTool>(null)
+  // Shape under the cursor in connector mode (drives the visible ports
+  // overlay). `null` when the cursor is over empty canvas.
+  const [hoverShapeId, setHoverShapeId] = useState<string | null>(null)
+  // In-flight connector — present only between pointerdown and
+  // pointerup of a draw gesture.
+  const [draft, setDraft] = useState<DraftConnector | null>(null)
+  // Refs mirror the above so window-level pointermove / pointerup
+  // listeners always see the latest values without forcing a re-bind
+  // on every state change.
+  const draftRef = useRef<DraftConnector | null>(null)
+  draftRef.current = draft
+  const selectedToolRef = useRef<SelectedTool>(null)
+  selectedToolRef.current = selectedTool
   marqueeModeRef.current = marqueeMode
+  // Pan ref mirrors the viewport hook's `pan` so the window-level
+  // pointer listeners (draft draw flow) always convert with the latest
+  // viewport offset without forcing a re-bind on every pan change.
+  const panRef = useRef(pan)
+  panRef.current = pan
 
   const handleMarqueePressStart = useCallback(() => {
     setMarqueeMode(true)
@@ -186,8 +225,205 @@ export function CanvasPage() {
     setMarqueeMode(false)
   }, [])
 
+  // ── Connector draw mode (Phase 3) ──────────────────────────────
+  //
+  // The connector tool follows a Figma-style dot-to-dot flow:
+  //
+  //   • Toolbar button arms the mode (sets `selectedTool` to 'connector').
+  //   • On pointerdown over the canvas, snap to the nearest port within
+  //     the screen-scaled radius; otherwise anchor at the cursor. Set
+  //     the in-flight draft to start = end (zero-length).
+  //   • On pointermove, track the cursor and snap the moving end to
+  //     the nearest port. Update the draft state.
+  //   • On pointerup, if the cursor travelled at least
+  //     CONNECTOR_MIN_DRAG_DISTANCE world units, commit a new
+  //     connector via `add-item`. Otherwise drop the draft as an
+  //     accidental click.
+  //
+  // The draft state is purely local — nothing reaches the worker until
+  // pointerup commits the connector, so a cancelled draw (Escape or
+  // sub-minimum drag) leaves no history or network trace.
+
+  // Convert client coords to world coords. Pan is the viewport's pixel
+  // offset of world (0, 0) on screen — see `useCanvasViewport.worldTransform`
+  // (`translate(pan) scale(zoom)`), so world = (client - surface.origin - pan) / zoom.
+  // The wheel handler in `useCanvasViewport` uses the same formula; keep them in sync.
+  function clientToWorld(
+    clientX: number,
+    clientY: number,
+    zoomVal: number,
+    panX: number,
+    panY: number
+  ) {
+    const rect = surfaceRef.current?.getBoundingClientRect()
+    if (!rect) return { x: 0, y: 0 }
+    return {
+      x: (clientX - rect.left - panX) / zoomVal,
+      y: (clientY - rect.top - panY) / zoomVal
+    }
+  }
+
+  // Find the topmost shape under the cursor (highest `order`). Used to
+  // decide which shape's ports to render in the overlay. Skips
+  // connectors (they have no ports). Returns null if nothing's under
+  // the cursor.
+  function hitTestShape(cursor: { x: number; y: number }): string | null {
+    let topId: string | null = null
+    let topOrder = -Infinity
+    for (const item of Object.values(state.items)) {
+      if (item.type === 'connector') continue
+      if (item.w === undefined || item.h === undefined) continue
+      const bb = computeBoundingBox(item, state.items)
+      if (
+        cursor.x >= bb.x &&
+        cursor.x <= bb.x + bb.w &&
+        cursor.y >= bb.y &&
+        cursor.y <= bb.y + bb.h
+      ) {
+        if (item.order > topOrder) {
+          topId = item.id
+          topOrder = item.order
+        }
+      }
+    }
+    return topId
+  }
+
+  // Surface pointerdown — branches on connector mode. Wraps the
+  // viewport hook's `onSurfacePointerDown` so the pan handler still
+  // runs for the other tools.
+  const handleSurfacePointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (selectedToolRef.current === 'connector' && e.button === 0) {
+        e.preventDefault()
+        e.stopPropagation()
+        const w = clientToWorld(e.clientX, e.clientY, zoom, pan.x, pan.y)
+        const snap = findNearestPort(w, null, state.items, CONNECTOR_SNAP_RADIUS_PX / zoom)
+        const start = snap ? getPortWorld(state.items[snap.itemId], snap.port) : w
+        setDraft({
+          start,
+          end: start,
+          startSnap: snap,
+          endSnap: null
+        })
+        return
+      }
+      onSurfacePointerDown(e)
+    },
+    [zoom, pan.x, pan.y, state.items, onSurfacePointerDown]
+  )
+
+  // Window-level pointermove / pointerup while a draft is in flight.
+  // The handlers read from refs so they always see the latest zoom +
+  // items without forcing a re-bind on every render.
+  useEffect(() => {
+    if (!draft) return
+
+    function onMove(e: PointerEvent) {
+      const d = draftRef.current
+      if (!d) return
+      const p = panRef.current
+      const w = clientToWorld(e.clientX, e.clientY, zoom, p.x, p.y)
+      const snap = findNearestPort(w, null, state.items, CONNECTOR_SNAP_RADIUS_PX / zoom)
+      const end = snap ? getPortWorld(state.items[snap.itemId], snap.port) : w
+      setDraft({ start: d.start, end, startSnap: d.startSnap, endSnap: snap })
+    }
+
+    function onUp() {
+      const d = draftRef.current
+      draftRef.current = null
+      setDraft(null)
+      if (!d) return
+      const dx = d.end.x - d.start.x
+      const dy = d.end.y - d.start.y
+      if (Math.hypot(dx, dy) < CONNECTOR_MIN_DRAG_DISTANCE) {
+        // Sub-threshold click — drop the draft without committing.
+        return
+      }
+      const start: ConnectorEnd = d.startSnap
+        ? { kind: 'attached', itemId: d.startSnap.itemId, port: d.startSnap.port }
+        : { kind: 'free', x: d.start.x, y: d.start.y }
+      const end: ConnectorEnd = d.endSnap
+        ? { kind: 'attached', itemId: d.endSnap.itemId, port: d.endSnap.port }
+        : { kind: 'free', x: d.end.x, y: d.end.y }
+      if (!state.activeBoardId) return
+      const id = uid()
+      const now = Date.now()
+      dispatchAction({
+        type: 'add-item',
+        item: {
+          id,
+          boardId: state.activeBoardId,
+          type: 'connector',
+          x: d.start.x,
+          y: d.start.y,
+          stroke: DEFAULT_STROKE,
+          strokeWidth: DEFAULT_STROKE_WIDTH,
+          lineCap: 'round',
+          arrowStart: 'none',
+          arrowEnd: 'arrow',
+          strokePattern: 'solid',
+          curve: 'straight',
+          start,
+          end,
+          order: 0,
+          updatedAt: now
+        }
+      })
+      setSelectedIds(new Set([id]))
+      setSelectedTool(null)
+      setHoverShapeId(null)
+    }
+
+    function onCancel() {
+      draftRef.current = null
+      setDraft(null)
+    }
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onCancel)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onCancel)
+    }
+  }, [draft, zoom, state.items, state.activeBoardId, dispatchAction])
+
+  // Pointermove on the surface (no button) drives the hover-ports
+  // overlay. Only active when the connector tool is armed and no
+  // draft is in flight. Installed at the surface level so it shares
+  // the same coordinate space as the surface.
+  const handleSurfacePointerMove = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (selectedToolRef.current !== 'connector') return
+      if (draftRef.current !== null) return
+      const w = clientToWorld(e.clientX, e.clientY, zoom, pan.x, pan.y)
+      setHoverShapeId(hitTestShape(w))
+    },
+    [zoom, pan.x, pan.y]
+  )
+
+  const handleSurfacePointerLeave = useCallback(() => {
+    // Pointer leaves the surface — clear hover so the ports overlay
+    // doesn't linger at the last known location.
+    if (selectedToolRef.current !== 'connector') return
+    setHoverShapeId(null)
+  }, [])
+
+  // When the user switches off the connector tool, drop any in-flight
+  // draft and clear the hover. (Escape already handles this; this is
+  // a belt-and-suspenders for clicks on the toolbar button.)
+  useEffect(() => {
+    if (selectedTool !== 'connector') {
+      setDraft(null)
+      setHoverShapeId(null)
+    }
+  }, [selectedTool])
+
   // Disarm marquee on Escape so the user has a single-key way out
-  // without hunting for the toolbar button.
+  // without hunting for the toolbar button. Connector draw mode also
+  // gets cleared — the in-flight draft is dropped without committing.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return
@@ -197,6 +433,12 @@ export function CanvasPage() {
       if (marqueeModeRef.current) {
         e.preventDefault()
         setMarqueeMode(false)
+      }
+      if (selectedToolRef.current !== null) {
+        e.preventDefault()
+        setSelectedTool(null)
+        setDraft(null)
+        setHoverShapeId(null)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -260,9 +502,12 @@ export function CanvasPage() {
             updatedAt: now
           }
           break
-        case 'line':
-        case 'arrow': {
-          // Connectors carry `start` / `end` (free-floating by default).
+        case 'connector': {
+          // Phase 3 unified connector — default to a 200-unit horizontal
+          // arrow (arrowhead at end). The toolbar's primary path is the
+          // drag-to-create flow (`selectedTool === 'connector'`); this
+          // branch is a fallback for any direct call to `addShape` (test
+          // hooks, future programmatic use).
           const start: ConnectorEnd = { kind: 'free', x, y }
           const end: ConnectorEnd = { kind: 'free', x: x + 200, y }
           item = {
@@ -274,6 +519,10 @@ export function CanvasPage() {
             stroke: DEFAULT_STROKE,
             strokeWidth: DEFAULT_STROKE_WIDTH,
             lineCap: 'round',
+            arrowStart: 'none',
+            arrowEnd: 'arrow',
+            strokePattern: 'solid',
+            curve: 'straight',
             start,
             end,
             order: 0,
@@ -843,6 +1092,8 @@ export function CanvasPage() {
         onZoomOut={zoomOut}
         onResetZoom={resetView}
         onAddShape={addShape}
+        selectedTool={selectedTool}
+        onSelectTool={setSelectedTool}
         onDelete={handleDelete}
         hasSelection={selectedIds.size > 0}
         canUndo={historyState.past.length > 0}
@@ -863,11 +1114,16 @@ export function CanvasPage() {
       <div className='flex flex-1 flex-row overflow-hidden'>
         <main
           ref={surfaceRef}
-          onPointerDown={onSurfacePointerDown}
+          onPointerDown={handleSurfacePointerDown}
+          onPointerMove={handleSurfacePointerMove}
+          onPointerLeave={handleSurfacePointerLeave}
           onContextMenu={(e) => e.preventDefault()}
           data-active-board-id={state.activeBoardId ?? ''}
           className='canvas-grid relative flex-1 select-none overflow-hidden'
-          style={{ cursor: isPanning ? 'grabbing' : 'grab', touchAction: 'none' }}
+          style={{
+            cursor: selectedTool === 'connector' ? 'crosshair' : isPanning ? 'grabbing' : 'grab',
+            touchAction: 'none'
+          }}
         >
           <div className='absolute inset-0 origin-top-left' style={{ transform: worldTransform }}>
             <CanvasItems
@@ -883,6 +1139,12 @@ export function CanvasPage() {
               onUpdate={handleUpdate}
               onResize={handleResize}
               onTransientUpdate={handleTransientUpdate}
+            />
+            <CanvasOverlay
+              showPorts={selectedTool === 'connector'}
+              hoverShape={hoverShapeId ? (itemsById[hoverShapeId] ?? null) : null}
+              zoom={zoom}
+              draft={draft}
             />
           </div>
           <Marquee

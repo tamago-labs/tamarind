@@ -70,6 +70,17 @@ schema.register({
     { name: 'fontSize', type: 'float64' },
     { name: 'start', type: 'string' },
     { name: 'end', type: 'string' },
+    // Connector-only styling (Phase 3 — unified `connector` shape).
+    // `arrowStart`/`arrowEnd` mirror `ArrowheadStyle` ('none' | 'arrow').
+    // `strokePattern` mirrors `StrokePattern` ('solid' | 'dashed' | 'dotted').
+    // `curve` mirrors `Curve` ('straight' | 'bezier').
+    // `label` is a JSON-encoded `ConnectorLabel` (v1 hyperschema workaround,
+    // mirrors how `start`/`end` ship as opaque JSON strings).
+    { name: 'arrowStart', type: 'string' },
+    { name: 'arrowEnd', type: 'string' },
+    { name: 'strokePattern', type: 'string' },
+    { name: 'curve', type: 'string' },
+    { name: 'label', type: 'string' },
     { name: 'order', type: 'int', required: true },
     { name: 'updatedAt', type: 'int', required: true }
   ]

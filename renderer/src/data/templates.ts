@@ -10,7 +10,7 @@
 // The `build()` factory accepts the active board id + current timestamp
 // and returns a fresh array of items ready for dispatch.
 
-import type { BoardScopedItem } from '../canvas/types'
+import type { BoardScopedItem, ConnectorLabel } from '../canvas/types'
 import {
   DEFAULT_NOTE_FONT_SIZE,
   DEFAULT_STROKE,
@@ -110,17 +110,41 @@ function text(
 }
 
 function arrow(x1: number, y1: number, x2: number, y2: number): BoardScopedItem {
+  return connector(x1, y1, x2, y2)
+}
+
+// Phase 3 unified connector (replaces the old `arrow()` helper).
+// Defaults mirror what the toolbar draws: arrowhead at the end,
+// otherwise a plain solid straight line.
+function connector(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  opts: {
+    arrowStart?: 'none' | 'arrow'
+    arrowEnd?: 'none' | 'arrow'
+    strokePattern?: 'solid' | 'dashed' | 'dotted'
+    curve?: 'straight' | 'bezier'
+    label?: ConnectorLabel
+  } = {}
+): BoardScopedItem {
   const start: ConnectorEnd = { kind: 'free', x: x1, y: y1 }
   const end: ConnectorEnd = { kind: 'free', x: x2, y: y2 }
   return {
     id: '',
     boardId: '',
-    type: 'arrow',
+    type: 'connector',
     x: x1,
     y: y1,
     stroke: DEFAULT_STROKE,
     strokeWidth: DEFAULT_STROKE_WIDTH,
     lineCap: 'round',
+    arrowStart: opts.arrowStart ?? 'none',
+    arrowEnd: opts.arrowEnd ?? 'arrow',
+    strokePattern: opts.strokePattern ?? 'solid',
+    curve: opts.curve ?? 'straight',
+    label: opts.label,
     start,
     end,
     order: 0,
@@ -141,8 +165,9 @@ const FOOTBALL: Template = {
     // Pitch background (green tint — gives the football layout its
     // pitch identity when dropped on the white canvas).
     items.push(rect(40, 40, pitchW, pitchH, { fill: '#86efac' }))
-    // Center line.
-    items.push(arrow(40 + pitchW / 2, 40, 40 + pitchW / 2, 40 + pitchH))
+    // Center line — bare line, no arrowheads (this is a structural
+    // pitch marking, not a directional indicator).
+    items.push(connector(40 + pitchW / 2, 40, 40 + pitchW / 2, 40 + pitchH, { arrowEnd: 'none' }))
     // Center circle (approximated with an ellipse outline).
     items.push({
       ...ellipse(40 + pitchW / 2 - 40, 40 + pitchH / 2 - 40, 80, 80, { fill: 'none' }),
@@ -171,7 +196,15 @@ const FOOTBALL: Template = {
     const cm = labels[6]
     const am = labels[8]
     items.push(
-      arrow(cm[0] + playerW / 2, cm[1] + playerH / 2, am[0] + playerW / 2, am[1] + playerH / 2),
+      connector(
+        cm[0] + playerW / 2,
+        cm[1] + playerH / 2,
+        am[0] + playerW / 2,
+        am[1] + playerH / 2,
+        {
+          label: { text: 'pass', at: 'middle' }
+        }
+      ),
       arrow(am[0] + playerW / 2, am[1] + playerH / 2, am[0] + playerW / 2, am[1] - 60)
     )
     return items
@@ -198,8 +231,10 @@ const BASKETBALL: Template = {
       ...ellipse(40 + 520 / 2 - 130, 40 + 360 - 280, 260, 280, { fill: 'none' }),
       text: undefined
     })
-    // Hoop line.
-    items.push(arrow(40 + 520 / 2, 40 + 360 - 4, 40 + 520 / 2, 40 + 360 + 8))
+    // Hoop line — bare line, no arrowhead (court marking).
+    items.push(
+      connector(40 + 520 / 2, 40 + 360 - 4, 40 + 520 / 2, 40 + 360 + 8, { arrowEnd: 'none' })
+    )
     // 5 players.
     const playerW = 36
     const playerH = 36
@@ -232,9 +267,15 @@ const SALES: Template = {
     for (let i = 0; i < xs.length; i++) {
       items.push(rect(xs[i], y, boxW, boxH, { fill: fills[i], text: labels[i] }))
     }
-    // Arrows between consecutive stages.
+    // Arrows between consecutive stages. The final stage gets a "won"
+    // label to demonstrate the new connector-label feature.
     for (let i = 0; i < xs.length - 1; i++) {
-      items.push(arrow(xs[i] + boxW, y + boxH / 2, xs[i + 1], y + boxH / 2))
+      const isLast = i === xs.length - 2
+      items.push(
+        connector(xs[i] + boxW, y + boxH / 2, xs[i + 1], y + boxH / 2, {
+          label: isLast ? { text: 'won', at: 'middle' } : undefined
+        })
+      )
     }
     // Title.
     items.push(text(40, 20, 620, 40, 'Sales pipeline', 24))

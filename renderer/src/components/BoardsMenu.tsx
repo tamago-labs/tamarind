@@ -140,6 +140,17 @@ export function BoardsMenu({
                           type='button'
                           onClick={() => {
                             if (confirm(`Delete board "${b.name}" and all its shapes?`)) {
+                              // Defensive cleanup: clear any in-progress
+                              // rename so a stale editingId from the
+                              // deleted board doesn't linger and confuse
+                              // the next pencil click on a remaining
+                              // board. Also close the menu — the user
+                              // just made a destructive choice, leaving
+                              // it open with a half-state list is
+                              // visually jarring.
+                              setEditingId(null)
+                              setDraftName('')
+                              setOpen(false)
                               onDelete(b.id)
                             }
                           }}

@@ -3,7 +3,7 @@
 // only the storage layer changes. Phase 3 will mirror this union into
 // a hyperschema/hyperdb/hyperdispatch spec.
 
-export type GenericShapeType = 'rect' | 'ellipse' | 'line' | 'arrow' | 'text'
+export type GenericShapeType = 'rect' | 'ellipse' | 'connector' | 'text'
 export type ShapeType = GenericShapeType
 
 // ── Boards ───────────────────────────────────────────────────────
@@ -65,21 +65,28 @@ export interface TextItem extends ShapeBase {
   fontSize?: number
 }
 
-// LineItem / ArrowItem drop x2/y2 — endpoints live in `start` / `end`.
-// x and y mirror `effectiveStart` so the item still has a stable
-// position for sorting and marquee hit-testing.
-export interface LineItem extends ShapeBase {
-  type: 'line'
-  lineCap?: LineCap
-  start: ConnectorEnd
-  end: ConnectorEnd
+// Connector (Phase 3 — replaces the old separate LineItem and ArrowItem).
+// Endpoints live in `start` / `end`. `x` and `y` mirror the effective
+// start so the item still has a stable position for sorting and marquee
+// hit-testing. Optional styling fields: arrowhead at either end, stroke
+// pattern (solid/dashed/dotted), curve (straight/bezier), and an inline
+// label (great for "pass" / "won" annotations on tactical diagrams).
+export interface ConnectorLabel {
+  text: string
+  at: 'start' | 'middle' | 'end'
+  fontSize?: number
 }
 
-export interface ArrowItem extends ShapeBase {
-  type: 'arrow'
+export interface ConnectorItem extends ShapeBase {
+  type: 'connector'
   lineCap?: LineCap
   start: ConnectorEnd
   end: ConnectorEnd
+  arrowStart?: 'none' | 'arrow'
+  arrowEnd?: 'none' | 'arrow'
+  strokePattern?: 'solid' | 'dashed' | 'dotted'
+  curve?: 'straight' | 'bezier'
+  label?: ConnectorLabel
 }
 
 // Flat item on the canvas. boardId foreign-keys to a Board. Phase 3
@@ -90,13 +97,13 @@ export interface BoardScopedItem {
   id: string
   boardId: string
   type: ShapeType
-  // Always present — primary world position. For line/arrow, mirrors
+  // Always present — primary world position. For connectors, mirrors
   // the effective start point (or kept current if start is attached).
   x: number
   y: number
   w?: number
   h?: number
-  // Connector endpoints — only set when type is 'line' or 'arrow'.
+  // Connector endpoints — only set when type is 'connector'.
   start?: ConnectorEnd
   end?: ConnectorEnd
   text?: string
@@ -105,6 +112,14 @@ export interface BoardScopedItem {
   fill?: string
   lineCap?: LineCap
   fontSize?: number
+  // Phase 3 connector-only styling. Optional; absent decodes to the
+  // visual default (no arrowheads at either end, solid stroke, straight
+  // curve, no label).
+  arrowStart?: 'none' | 'arrow'
+  arrowEnd?: 'none' | 'arrow'
+  strokePattern?: 'solid' | 'dashed' | 'dotted'
+  curve?: 'straight' | 'bezier'
+  label?: ConnectorLabel
   // Z-order — assigned at construction by the reducer's monotonic
   // `orderCounter` field on `CanvasState`.
   order: number
@@ -154,7 +169,7 @@ export function isResizable(type: ShapeType): boolean {
 }
 
 export function isConnector(type: ShapeType): boolean {
-  return type === 'line' || type === 'arrow'
+  return type === 'connector'
 }
 
 export interface BBox {

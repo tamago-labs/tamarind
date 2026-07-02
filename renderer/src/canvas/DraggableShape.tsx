@@ -19,8 +19,7 @@ import type { BoardScopedItem, ResizeHandle } from './types'
 import { isConnector, isResizable } from './types'
 import { RectShape } from './shapes/RectShape'
 import { EllipseShape } from './shapes/EllipseShape'
-import { LineShape } from './shapes/LineShape'
-import { ArrowShape } from './shapes/ArrowShape'
+import { ConnectorShape } from './shapes/ConnectorShape'
 import { TextShape } from './shapes/TextShape'
 import { SelectionOverlay } from './SelectionOverlay'
 import { ResizeHandles } from './ResizeHandles'
@@ -63,10 +62,8 @@ function ShapeForItem({
       return <RectShape item={item} onUpdate={onUpdate} />
     case 'ellipse':
       return <EllipseShape item={item} onUpdate={onUpdate} />
-    case 'line':
-      return <LineShape item={item} itemsById={itemsById} />
-    case 'arrow':
-      return <ArrowShape item={item} itemsById={itemsById} />
+    case 'connector':
+      return <ConnectorShape item={item} itemsById={itemsById} />
     case 'text':
       return <TextShape item={item} onUpdate={onUpdate} />
   }
