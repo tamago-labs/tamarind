@@ -15,6 +15,8 @@ const fill = 'none'
 function FootballThumb() {
   return (
     <svg viewBox='0 0 160 100' className='h-full w-full' aria-hidden='true'>
+      {/* Pitch background — matches the green tint of the actual football template. */}
+      <rect x={6} y={10} width={148} height={80} fill='#86efac' stroke={stroke} strokeWidth={1} />
       <line x1={80} y1={10} x2={80} y2={90} stroke={stroke} strokeWidth={1} />
       <ellipse cx={80} cy={50} rx={14} ry={10} fill={fill} stroke={stroke} strokeWidth={1} />
       {/* 11 player dots, same formation as the template. */}

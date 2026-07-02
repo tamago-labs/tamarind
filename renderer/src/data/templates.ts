@@ -138,7 +138,10 @@ const FOOTBALL: Template = {
     const pitchW = 520
     const pitchH = 360
     const items: BoardScopedItem[] = []
-    // Center line (no pitch background — keeps the canvas white).
+    // Pitch background (green tint — gives the football layout its
+    // pitch identity when dropped on the white canvas).
+    items.push(rect(40, 40, pitchW, pitchH, { fill: '#86efac' }))
+    // Center line.
     items.push(arrow(40 + pitchW / 2, 40, 40 + pitchW / 2, 40 + pitchH))
     // Center circle (approximated with an ellipse outline).
     items.push({

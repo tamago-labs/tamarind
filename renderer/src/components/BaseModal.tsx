@@ -9,6 +9,16 @@ import { X } from 'lucide-react'
 // AnimatePresence / focus / escape / busy plumbing. `busy` is the only
 // stateful knob — when true, the close button is disabled and the Escape
 // handler no-ops so the user can't dismiss mid-submit.
+//
+// `variant` picks the card theme:
+//   • 'splash' (default) — tamarind gradient + white text. Used for
+//     modals that appear over the splash page (InviteJoinModal,
+//     NameEditModal) where the green/white look matches the page.
+//   • 'canvas' — solid white card + gray text. Used for modals that
+//     appear over the canvas (TemplatesModal) where the green gradient
+//     would clash with the white workspace.
+
+export type BaseModalVariant = 'splash' | 'canvas'
 
 export interface BaseModalProps {
   open: boolean
@@ -28,6 +38,14 @@ export interface BaseModalProps {
   // Extra classes for the inner dialog card.
   className?: string
   ariaLabel?: string
+  variant?: BaseModalVariant
+}
+
+const VARIANT_CLASSES: Record<BaseModalVariant, string> = {
+  splash:
+    'border-white/10 bg-gradient-to-br from-tamarind-700 to-tamarind-900 [&_h2]:text-white [&_p]:text-white/70 [&_button[aria-label="Close"]]:text-white/70 [&_button[aria-label="Close"]]:hover:bg-white/10 [&_button[aria-label="Close"]]:focus:ring-white/30',
+  canvas:
+    'border-gray-200 bg-white [&_h2]:text-gray-800 [&_p]:text-gray-600 [&_button[aria-label="Close"]]:text-gray-500 [&_button[aria-label="Close"]]:hover:bg-gray-100 [&_button[aria-label="Close"]]:focus:ring-tamarind-300'
 }
 
 export function BaseModal({
@@ -40,7 +58,8 @@ export function BaseModal({
   children,
   footer,
   className = '',
-  ariaLabel
+  ariaLabel,
+  variant = 'splash'
 }: BaseModalProps) {
   // Escape closes the modal (unless busy). Window-level listener because
   // the input inside the modal might not have focus when the user mashes
@@ -56,6 +75,8 @@ export function BaseModal({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open, busy, onClose])
+
+  const variantClass = VARIANT_CLASSES[variant]
 
   return (
     <AnimatePresence>
@@ -78,25 +99,25 @@ export function BaseModal({
             exit={{ opacity: 0, scale: 0.96, y: 4 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
             onClick={(e) => e.stopPropagation()}
-            className={`w-full max-w-md rounded-lg border border-white/10 bg-gradient-to-br from-tamarind-700 to-tamarind-900 p-6 shadow-2xl ${className}`}
+            className={`w-full max-w-md rounded-lg border p-6 shadow-2xl ${variantClass} ${className}`}
           >
             <div className='flex items-start justify-between gap-4'>
               <div className='flex items-center gap-2'>
                 {icon}
-                <h2 className='text-lg font-semibold text-white'>{title}</h2>
+                <h2 className='text-lg font-semibold'>{title}</h2>
               </div>
               <button
                 type='button'
                 onClick={onClose}
                 disabled={busy}
                 aria-label='Close'
-                className='inline-flex h-7 w-7 items-center justify-center rounded text-white/70 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/30 disabled:cursor-not-allowed disabled:opacity-50'
+                className='inline-flex h-7 w-7 items-center justify-center rounded transition focus:outline-none focus:ring-2 disabled:cursor-not-allowed disabled:opacity-50'
               >
                 <X className='h-4 w-4' aria-hidden='true' />
               </button>
             </div>
 
-            {hint && <p className='mt-2 text-sm text-white/70'>{hint}</p>}
+            {hint && <p className='mt-2 text-sm'>{hint}</p>}
 
             <div className='mt-4'>{children}</div>
 

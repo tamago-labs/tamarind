@@ -136,12 +136,11 @@ class TamarindRoom extends ReadyResource {
       // the old `view.update` call silently treated the {id} arg as a
       // bee.update(opts) and did nothing, so board renames appeared to
       // succeed locally but never round-tripped through the autobase.
-      await applyUpdate(
-        context.view,
-        '@tamarind/boards',
-        { id: data.id },
-        (b) => ({ ...b, name: data.name, updatedAt: data.at })
-      )
+      await applyUpdate(context.view, '@tamarind/boards', { id: data.id }, (b) => ({
+        ...b,
+        name: data.name,
+        updatedAt: data.at
+      }))
     })
     this.router.add('@tamarind/delete-board', async (data, context) => {
       // Last-board guard: refuse to delete the only remaining board.
@@ -317,9 +316,7 @@ class TamarindRoom extends ReadyResource {
   // this helper exists so the worker entry can fire the same encoded
   // route that any other peer would emit.
   async appendRemoveChats(ids) {
-    await this.base.append(
-      TamarindDispatch.encode('@tamarind/remove-chats', { ids: ids.slice() })
-    )
+    await this.base.append(TamarindDispatch.encode('@tamarind/remove-chats', { ids: ids.slice() }))
   }
 
   // Dispatch a single board action through the encoded route. Each
@@ -359,9 +356,23 @@ class TamarindRoom extends ReadyResource {
         )
         return
       case 'add-items':
-        await this.base.append(
-          TamarindDispatch.encode('@tamarind/add-items', { items: action.items.map(encodeItem) })
-        )
+        // Per-item dispatch — the `@tamarind/add-items` route uses the
+        // `item-batch` schema with `items: json` (hyperschema has no v1
+        // arrays-of-named-records), and `JSON.stringify(buffer)` produces
+        // `{type:"Buffer", data:[…]}` which parses back as a plain object —
+        // not a Buffer. HyperDB then tries to `BUFFER.preencode` the id,
+        // hits `id.byteLength === undefined`, sets `state.end` to NaN, and
+        // `allocUnsafe(NaN)` throws "Array buffer allocation failed" inside
+        // `IndexEncoder._encode`. Templates were the first path to hit this
+        // because the toolbar's add-rect/add-ellipse/add-arrow all use the
+        // singular `add-item` (proper buffers); paste/duplicate uses
+        // `add-items` too and had the same latent bug, but the user hadn't
+        // pasted a buffer-bearing item yet. Workaround: emit one
+        // `add-item` per item so each rides the `@tamarind/item` schema
+        // where id/boardId are real Buffers.
+        for (const item of action.items) {
+          await this.base.append(TamarindDispatch.encode('@tamarind/add-item', encodeItem(item)))
+        }
         return
       case 'update-item':
         await this.base.append(
