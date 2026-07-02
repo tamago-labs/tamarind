@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import type { Board, GenericShapeType } from '../canvas/types'
 import { BoardsMenu } from './BoardsMenu'
+import { ExportMenu } from './ExportMenu'
 
 // Phase 3 tool state. The connector uses a different interaction model
 // (click + drag to draw with snap) so it lives in its own state slot
@@ -73,6 +74,15 @@ interface CanvasToolbarProps {
   canRestore: boolean
   onBackup: () => void
   onRestore: () => void
+  // Phase 4: visual export (SVG / PNG). Same gating as Backup/Restore
+  // — disabled until there's an active board to render. `onExportSvg`
+  // produces a `.svg` file via the same Blob+anchor dance as Backup;
+  // `onExportPng` rasterizes via `<canvas>` first.
+  // `hasSelection` is shared with the Delete button above — same
+  // source of truth (selectedIds.size > 0).
+  canExport: boolean
+  onExportSvg: () => void
+  onExportPng: () => void
 }
 
 const SHORTCUT_HINT = 'Cmd/Ctrl+Z to undo · Cmd/Ctrl+Shift+Z to redo · Cmd/Ctrl+A to select all'
@@ -212,7 +222,10 @@ export function CanvasToolbar({
   canBackup,
   canRestore,
   onBackup,
-  onRestore
+  onRestore,
+  canExport,
+  onExportSvg,
+  onExportPng
 }: CanvasToolbarProps) {
   return (
     <header
@@ -319,6 +332,21 @@ export function CanvasToolbar({
         >
           Restore
         </button>
+
+        <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
+
+        {/* Visual export (SVG / PNG). Selection-aware: subtitle on
+           each option surfaces whether the export covers the current
+           selection (bbox union) or the visible viewport. Selection
+           state is read from `hasSelection` at click time, not at
+           menu-open time, so toggling selection while the menu is
+           open updates the hint before the user clicks. */}
+        <ExportMenu
+          canExport={canExport}
+          hasSelection={hasSelection}
+          onExportSvg={onExportSvg}
+          onExportPng={onExportPng}
+        />
 
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 

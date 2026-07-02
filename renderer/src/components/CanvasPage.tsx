@@ -55,6 +55,14 @@ import { PropertiesDrawer } from './PropertiesDrawer'
 import { GroupChatPanel } from './GroupChatPanel'
 import { TemplatesModal } from './TemplatesModal'
 import { BoardBackupError, buildBackupFilename, parseBackup, serializeBoard } from '../data/boardIO'
+import {
+  buildExportFilename,
+  buildExportSvg,
+  rasterizeSvgToPng,
+  selectionRect,
+  viewportRect,
+  type ExportLayout
+} from '../canvas/svgExport'
 
 const MIN_SHAPE_SIZE = 20
 
@@ -976,7 +984,9 @@ export function CanvasPage() {
   // but not applied as a rename — auto-rename would surprise users
   // who expect Restore to be additive. (The `parsed.name` is still
   // available for a future "Restore as new board" button.)
-  const [restoreBanner, setRestoreBanner] = useState<{
+  // Renamed from `restoreBanner` in Phase 4 — the same banner now
+  // surfaces success/error for the Backup, Restore, and Export flows.
+  const [feedbackBanner, setFeedbackBanner] = useState<{
     kind: 'success' | 'error'
     message: string
   } | null>(null)
@@ -1000,7 +1010,7 @@ export function CanvasPage() {
     a.click()
     document.body.removeChild(a)
     setTimeout(() => URL.revokeObjectURL(url), 0)
-    setRestoreBanner({
+    setFeedbackBanner({
       kind: 'success',
       message: `Backed up "${board.name}" (${items.length} item${items.length === 1 ? '' : 's'})`
     })
@@ -1025,11 +1035,11 @@ export function CanvasPage() {
         try {
           const parsed = parseBackup(text)
           if (!state.activeBoardId) {
-            setRestoreBanner({ kind: 'error', message: 'No active board to restore into' })
+            setFeedbackBanner({ kind: 'error', message: 'No active board to restore into' })
             return
           }
           if (parsed.items.length === 0) {
-            setRestoreBanner({
+            setFeedbackBanner({
               kind: 'error',
               message: `Backup "${parsed.name}" has no items to restore`
             })
@@ -1045,7 +1055,7 @@ export function CanvasPage() {
           }))
           dispatchAction({ type: 'add-items', items: stamped, at: now })
           setSelectedIds(new Set(stamped.map((it) => it.id)))
-          setRestoreBanner({
+          setFeedbackBanner({
             kind: 'success',
             message: `Restored ${stamped.length} item${stamped.length === 1 ? '' : 's'} from "${parsed.name}"`
           })
@@ -1056,12 +1066,12 @@ export function CanvasPage() {
               : e instanceof Error
                 ? `Failed to restore: ${e.message}`
                 : 'Failed to restore backup'
-          setRestoreBanner({ kind: 'error', message })
+          setFeedbackBanner({ kind: 'error', message })
         }
       }
       reader.onerror = () => {
         input.remove()
-        setRestoreBanner({ kind: 'error', message: 'Could not read the selected file' })
+        setFeedbackBanner({ kind: 'error', message: 'Could not read the selected file' })
       }
       reader.readAsText(file)
     }
@@ -1069,14 +1079,99 @@ export function CanvasPage() {
     input.click()
   }, [state.activeBoardId, dispatchAction])
 
+  // ── Visual export (Phase 4) ─────────────────────────────────────
+  //
+  // Selection-aware area: if the user has any items selected, export
+  // the bbox union of the selection (padded). Otherwise fall back to
+  // the visible viewport in world coordinates. Both paths feed the
+  // same `buildExportSvg` so the SVG output is byte-identical apart
+  // from the rect / mode label.
+  //
+  // SVG exports the document string directly. PNG rasterizes through
+  // a `<canvas>` (no choice — that's where `toBlob('image/png')`
+  // lives). Both share the same Blob+anchor download dance as Backup.
+  //
+  // Errors surface in the same `feedbackBanner` row as Backup/Restore
+  // so the user gets one consistent notification surface.
+
+  const exportBoard = useCallback(
+    async (kind: 'svg' | 'png') => {
+      if (!state.activeBoardId) return
+      const board = state.boards.find((b) => b.id === state.activeBoardId)
+      if (!board) return
+      const items = itemsArray.filter((it) => it.boardId === state.activeBoardId)
+      // Selection bbox if anything's selected; otherwise the visible
+      // viewport in world coords. `selectionRect` returns null when
+      // nothing matches the active board (defensive — `selectedIds`
+      // may contain stale ids from a different board).
+      let rect =
+        selectedIds.size > 0 ? selectionRect(items, selectedIds, state.activeBoardId) : null
+      if (!rect) {
+        const surfaceRect = surfaceRef.current?.getBoundingClientRect()
+        if (!surfaceRect) {
+          setFeedbackBanner({ kind: 'error', message: 'Could not measure canvas surface' })
+          return
+        }
+        rect = viewportRect(surfaceRect, pan, zoom)
+      }
+      const layout: ExportLayout = {
+        board: { name: board.name, createdAt: board.createdAt },
+        rect,
+        items,
+        itemsById: state.items,
+        mode: selectedIds.size > 0 ? 'selection' : 'viewport'
+      }
+      const svg = buildExportSvg(layout)
+      const filename = buildExportFilename(board, kind)
+      try {
+        const blob =
+          kind === 'svg'
+            ? new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })
+            : await rasterizeSvgToPng(svg)
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        setTimeout(() => URL.revokeObjectURL(url), 0)
+        const fmt = kind.toUpperCase()
+        const area =
+          layout.mode === 'selection'
+            ? `${items.filter((it) => selectedIds.has(it.id)).length} selected item${selectedIds.size === 1 ? '' : 's'}`
+            : 'visible viewport'
+        setFeedbackBanner({
+          kind: 'success',
+          message: `Exported ${area} of "${board.name}" as ${fmt}`
+        })
+      } catch (e) {
+        const message =
+          e instanceof Error
+            ? `Failed to export ${kind.toUpperCase()}: ${e.message}`
+            : 'Failed to export'
+        setFeedbackBanner({ kind: 'error', message })
+      }
+    },
+    [state.activeBoardId, state.boards, state.items, itemsArray, selectedIds, surfaceRef, pan, zoom]
+  )
+
+  const handleExportSvg = useCallback(() => {
+    void exportBoard('svg')
+  }, [exportBoard])
+
+  const handleExportPng = useCallback(() => {
+    void exportBoard('png')
+  }, [exportBoard])
+
   // Auto-dismiss the banner after 4s. Cleared on unmount + when a new
-  // banner replaces it (the effect re-arms for each `restoreBanner`
+  // banner replaces it (the effect re-arms for each `feedbackBanner`
   // identity change).
   useEffect(() => {
-    if (!restoreBanner) return
-    const t = setTimeout(() => setRestoreBanner(null), 4000)
+    if (!feedbackBanner) return
+    const t = setTimeout(() => setFeedbackBanner(null), 4000)
     return () => clearTimeout(t)
-  }, [restoreBanner])
+  }, [feedbackBanner])
 
   // Keyboard shortcuts. One window-level keydown listener. Native event
   // capture isn't used: each handler reads state via refs/memos and
@@ -1232,20 +1327,23 @@ export function CanvasPage() {
         canRestore={state.activeBoardId !== null}
         onBackup={handleBackup}
         onRestore={handleRestore}
+        canExport={state.activeBoardId !== null}
+        onExportSvg={handleExportSvg}
+        onExportPng={handleExportPng}
       />
-      {restoreBanner && (
+      {feedbackBanner && (
         <div
           role='status'
           className={
-            restoreBanner.kind === 'success'
+            feedbackBanner.kind === 'success'
               ? 'flex items-center justify-center border-b border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800'
               : 'flex items-center justify-center border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800'
           }
         >
-          <span>{restoreBanner.message}</span>
+          <span>{feedbackBanner.message}</span>
           <button
             type='button'
-            onClick={() => setRestoreBanner(null)}
+            onClick={() => setFeedbackBanner(null)}
             aria-label='Dismiss'
             className='ml-3 rounded-md px-2 py-0.5 text-xs font-medium hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-blue-500'
           >
