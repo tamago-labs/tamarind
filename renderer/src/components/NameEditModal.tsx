@@ -2,12 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Loader2, User } from 'lucide-react'
 import { BaseModal } from './BaseModal'
 
-// Per-session display name editor. Names are kept in memory on the
-// worker (and persisted to identity.json in the worker itself), so a
-// host → guest swap via restartRoomWorker won't lose the chosen name
-// — but a full Tamarind relaunch resets to the writer-pubkey-derived
-// default. Editing routes through `useRoom.renameSelf` which calls
-// `bridge.writeRoom({type:'rename-self', name})`.
+// Display name editor. Names are persisted to identity.json on the
+// worker (key + name survive a full Tamarind relaunch) and propagated
+// to peers via `{type:'me'}` so chat attribution stays stable across
+// host→guest swaps. Editing routes through `useRoom.renameSelf` which
+// calls `bridge.writeRoom({type:'rename-self', name})`.
 
 export interface NameEditModalProps {
   open: boolean
@@ -55,7 +54,7 @@ export function NameEditModal({
       open={open}
       onClose={onClose}
       title='Change display name'
-      hint='Per-session — resets when Tamarind restarts. Visible to peers in chat.'
+      hint='Your display name for this team.'
       busy={busy}
       icon={<User className='h-5 w-5 text-tamarind-300' aria-hidden='true' />}
       footer={

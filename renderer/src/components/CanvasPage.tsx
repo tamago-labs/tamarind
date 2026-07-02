@@ -31,6 +31,8 @@ import {
   DEFAULT_SHAPE_SIZE,
   DEFAULT_STROKE,
   DEFAULT_STROKE_WIDTH,
+  DEFAULT_TEXT_FONT_SIZE,
+  DEFAULT_TEXT_SIZE,
   getPortWorld,
   isConnector,
   type ActiveBoard,
@@ -48,6 +50,7 @@ import { CanvasFooter } from './CanvasFooter'
 import { CanvasToolbar } from './CanvasToolbar'
 import { PropertiesDrawer } from './PropertiesDrawer'
 import { GroupChatPanel } from './GroupChatPanel'
+import { TemplatesModal } from './TemplatesModal'
 
 const MIN_SHAPE_SIZE = 20
 
@@ -163,6 +166,10 @@ export function CanvasPage() {
   // Ephemeral clipboard (in-memory only).
   const [clipboard, setClipboard] = useState<BoardScopedItem[] | null>(null)
 
+  // Templates modal open/close. Insert closes the modal as a side effect
+  // of the optimistic dispatch in `handleInsertTemplate`.
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+
   // Toggle marquee mode. Clicking the toolbar button arms the marquee;
   // clicking it again (or pressing Escape) disarms it. The toggle stays
   // armed across many drags — the user can paint several marquees in
@@ -274,6 +281,23 @@ export function CanvasPage() {
           }
           break
         }
+        case 'text':
+          item = {
+            id,
+            boardId: state.activeBoardId,
+            type,
+            x,
+            y,
+            w: DEFAULT_TEXT_SIZE.w,
+            h: DEFAULT_TEXT_SIZE.h,
+            stroke: DEFAULT_STROKE,
+            strokeWidth: DEFAULT_STROKE_WIDTH,
+            text: '',
+            fontSize: DEFAULT_TEXT_FONT_SIZE,
+            order: 0,
+            updatedAt: now
+          }
+          break
       }
       // `order` is overridden by the reducer; the placeholder keeps
       // the type-checker happy until the reducer assigns it.
@@ -664,6 +688,29 @@ export function CanvasPage() {
     setSelectedIds(new Set(next.map((it) => it.id)))
   }, [itemsArray, dispatchAction])
 
+  // Insert a pre-built template. Items come from `data/templates.ts`
+  // with placeholder ids/boardId — we stamp them with the active board
+  // + fresh uids + updatedAt here, then dispatch through the existing
+  // `add-items` bulk action (which goes through `useRoom.sendAction` so
+  // peers echo the same items via the Autobase snapshot).
+  const handleInsertTemplate = useCallback(
+    (templateItems: BoardScopedItem[]) => {
+      if (!state.activeBoardId) return
+      const now = Date.now()
+      const stamped = templateItems.map((it) => ({
+        ...it,
+        id: uid(),
+        boardId: state.activeBoardId!,
+        updatedAt: now,
+        order: 0
+      }))
+      dispatchAction({ type: 'add-items', items: stamped, at: now })
+      setSelectedIds(new Set(stamped.map((it) => it.id)))
+      setTemplatesOpen(false)
+    },
+    [state.activeBoardId, dispatchAction]
+  )
+
   // Keyboard shortcuts. One window-level keydown listener. Native event
   // capture isn't used: each handler reads state via refs/memos and
   // short-circuits when focus is in an input/textarea/contentEditable
@@ -811,6 +858,7 @@ export function CanvasPage() {
         onAddBoard={handleAddBoard}
         onRenameBoard={handleRenameBoard}
         onDeleteBoard={handleDeleteBoard}
+        onOpenTemplates={() => setTemplatesOpen(true)}
       />
       <div className='flex flex-1 flex-row overflow-hidden'>
         <main
@@ -877,6 +925,11 @@ export function CanvasPage() {
         />
       </div>
       <CanvasFooter />
+      <TemplatesModal
+        open={templatesOpen}
+        onClose={() => setTemplatesOpen(false)}
+        onInsert={handleInsertTemplate}
+      />
     </motion.div>
   )
 }

@@ -21,6 +21,7 @@ import { RectShape } from './shapes/RectShape'
 import { EllipseShape } from './shapes/EllipseShape'
 import { LineShape } from './shapes/LineShape'
 import { ArrowShape } from './shapes/ArrowShape'
+import { TextShape } from './shapes/TextShape'
 import { SelectionOverlay } from './SelectionOverlay'
 import { ResizeHandles } from './ResizeHandles'
 import { ConnectorHandles } from './ConnectorHandles'
@@ -66,6 +67,8 @@ function ShapeForItem({
       return <LineShape item={item} itemsById={itemsById} />
     case 'arrow':
       return <ArrowShape item={item} itemsById={itemsById} />
+    case 'text':
+      return <TextShape item={item} onUpdate={onUpdate} />
   }
 }
 

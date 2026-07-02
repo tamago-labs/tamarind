@@ -153,7 +153,7 @@ export function PropertiesDrawer({
 
       <ArrangeSection onBringToFront={onBringToFront} onSendToBack={onSendToBack} />
 
-      {(item.type === 'rect' || item.type === 'ellipse') && (
+      {(item.type === 'rect' || item.type === 'ellipse' || item.type === 'text') && (
         <TextSection
           key={id}
           item={item}

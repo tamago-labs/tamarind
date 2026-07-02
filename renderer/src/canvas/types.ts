@@ -3,7 +3,7 @@
 // only the storage layer changes. Phase 3 will mirror this union into
 // a hyperschema/hyperdb/hyperdispatch spec.
 
-export type GenericShapeType = 'rect' | 'ellipse' | 'line' | 'arrow'
+export type GenericShapeType = 'rect' | 'ellipse' | 'line' | 'arrow' | 'text'
 export type ShapeType = GenericShapeType
 
 // ── Boards ───────────────────────────────────────────────────────
@@ -50,6 +50,17 @@ export interface EllipseItem extends ShapeBase {
   w: number
   h: number
   fill?: string
+  text?: string
+  fontSize?: number
+}
+
+// Free-floating text shape. Resizable bbox, no visible border (the bbox
+// exists only for hit-testing + selection overlay + resize handles).
+// `fill` is absent because text has no body — only the glyphs.
+export interface TextItem extends ShapeBase {
+  type: 'text'
+  w: number
+  h: number
   text?: string
   fontSize?: number
 }
@@ -129,6 +140,9 @@ export const SELECT_STROKE = '#3b82f6' // tailwind blue-500; matches the marquee
 export const DEFAULT_SHAPE_SIZE = { w: 160, h: 100 }
 export const DEFAULT_NOTE_TEXT = 'Double-click to edit'
 export const DEFAULT_NOTE_FONT_SIZE = 12
+export const DEFAULT_TEXT_SIZE = { w: 220, h: 60 }
+// Text shapes usually hold titles/labels, so start at a larger readable size.
+export const DEFAULT_TEXT_FONT_SIZE = 18
 export const CONNECTOR_HIT_RADIUS = 8 // world units, half-thickness of the invisible hit stroke
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -136,7 +150,7 @@ export type ResizeHandle = 'nw' | 'ne' | 'sw' | 'se'
 export type LineCap = 'round' | 'butt' | 'square'
 
 export function isResizable(type: ShapeType): boolean {
-  return type === 'rect' || type === 'ellipse'
+  return type === 'rect' || type === 'ellipse' || type === 'text'
 }
 
 export function isConnector(type: ShapeType): boolean {

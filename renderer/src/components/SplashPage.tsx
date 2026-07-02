@@ -107,7 +107,7 @@ export function SplashPage({
               : joining
                 ? `Joining with invite\u2026`
                 : role === null
-                  ? 'Connecting to local peers\u2026'
+                  ? 'Preparing Tamarind workspace\u2026'
                   : 'Starting Tamarind\u2026'}
           </span>
         </motion.div>

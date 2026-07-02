@@ -16,11 +16,13 @@
 import {
   ArrowRight,
   Circle,
+  LayoutTemplate,
   MousePointerSquareDashed,
   Minus,
   Redo2,
   Square,
   Trash2,
+  Type,
   Undo2,
   ZoomIn,
   ZoomOut
@@ -51,6 +53,7 @@ interface CanvasToolbarProps {
   onAddBoard: () => void
   onRenameBoard: (id: string, name: string) => void
   onDeleteBoard: (id: string) => void
+  onOpenTemplates: () => void
 }
 
 const SHORTCUT_HINT = 'Cmd/Ctrl+Z to undo · Cmd/Ctrl+Shift+Z to redo · Cmd/Ctrl+A to select all'
@@ -172,7 +175,8 @@ export function CanvasToolbar({
   onSelectBoard,
   onAddBoard,
   onRenameBoard,
-  onDeleteBoard
+  onDeleteBoard,
+  onOpenTemplates
 }: CanvasToolbarProps) {
   return (
     <header
@@ -233,6 +237,16 @@ export function CanvasToolbar({
         </ShapeButton>
         <ShapeButton label='Add arrow' onClick={() => onAddShape('arrow')}>
           <ArrowRight className='h-4 w-4' aria-hidden='true' />
+        </ShapeButton>
+        <ShapeButton label='Add text' onClick={() => onAddShape('text')}>
+          <Type className='h-4 w-4' aria-hidden='true' />
+        </ShapeButton>
+
+        <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
+
+        {/* Templates */}
+        <ShapeButton label='Templates' onClick={onOpenTemplates}>
+          <LayoutTemplate className='h-4 w-4' aria-hidden='true' />
         </ShapeButton>
 
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
