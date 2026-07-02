@@ -1,5 +1,18 @@
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const os = require('os')
+const {
+  ensureQvacConfig,
+  setMainWindow,
+  setActiveConfig,
+  ensureModel,
+  cancelCurrentRequest,
+  unloadCurrent,
+  getActiveModelId,
+  mapError,
+  buildStatus,
+  resetCache
+} = require('./qvac')
+const { modelStore } = require('./modelStore')
 const path = require('path')
 const PearRuntime = require('pear-runtime')
 const FramedStream = require('framed-stream')
@@ -249,6 +262,140 @@ ipcMain.handle('app:afterUpdate', () => {
   app.quit()
 })
 
+// ============================================
+// AI / Models IPC Handlers (Phase 5)
+// ============================================
+//
+// Backed by qvac.js (SDK chokepoint) and modelStore.js (persisted
+// registry). Mirrors the surface of `desktop-app/src/main/index.ts`
+// at C:\projects\tamaflow adapted for Tamarind's CommonJS main + the
+// window.bridge IPC shape.
+//
+// The ai-config:* pair carries per-load model configuration
+// (ctx_size + tools); persisted in <userData>/models.json under the
+// `aiConfig` key so the modal's "Model configuration" section
+// survives reloads.
+
+function buildModelsStatus() {
+  const s = buildStatus()
+  return {
+    active: s.active,
+    lastSelectedId: modelStore.getLastSelected()?.id ?? null,
+    available: modelStore.getAll()
+  }
+}
+
+function registerModelsIpc() {
+  ipcMain.handle('models:list', () => modelStore.getAll())
+  ipcMain.handle('models:add', (_evt, entry) => {
+    if (!entry?.name?.trim() || !entry?.source?.trim()) {
+      throw new Error('Both name and source are required')
+    }
+    return modelStore.add({
+      name: entry.name.trim(),
+      source: entry.source.trim(),
+      description: entry.description?.trim(),
+      quantization: entry.quantization?.trim(),
+      params: entry.params?.trim()
+    })
+  })
+  ipcMain.handle('models:remove', (_evt, id) => modelStore.remove(id))
+  ipcMain.handle('models:status', () => buildModelsStatus())
+
+  // Open a file picker so the renderer can add a local .gguf model.
+  ipcMain.handle('models:pickFile', async () => {
+    const cur = BrowserWindow.getFocusedWindow()
+    if (!cur) return null
+    const result = await dialog.showOpenDialog(cur, {
+      title: 'Select a GGUF model file',
+      properties: ['openFile'],
+      filters: [
+        { name: 'GGUF Models', extensions: ['gguf'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    const picked = result.filePaths[0]
+    if (!picked.toLowerCase().endsWith('.gguf')) {
+      throw new Error('Selected file is not a .gguf model')
+    }
+    return picked
+  })
+
+  // Drive the actual download + load for the selected entry.
+  ipcMain.handle('models:select', async (_evt, id) => {
+    const entry = modelStore.getById(id)
+    if (!entry) return { success: false, error: 'Unknown model id' }
+    try {
+      await cancelCurrentRequest()
+      const prevId = getActiveModelId()
+      if (prevId) await unloadCurrent(prevId)
+      modelStore.setLastSelected(entry.id)
+      // Push the active config into qvac before the load; ensureModel
+      // builds its modelConfig from this snapshot. Persisted in
+      // modelStore so the next launch picks up the same defaults.
+      const config = modelStore.getAiConfig()
+      setActiveConfig(config)
+      await ensureModel(entry)
+      return { success: true }
+    } catch (err) {
+      const mapped = mapError(err)
+      sendToAll('models:error', mapped)
+      return { success: false, error: mapped.message }
+    }
+  })
+  ipcMain.handle('models:cancel', async (_evt, opts) => {
+    await cancelCurrentRequest({ clearCache: opts?.clearCache })
+    return { success: true }
+  })
+  ipcMain.handle('models:resetCache', async (_evt, id) => {
+    const entry = modelStore.getById(id)
+    if (!entry) return { success: false, deleted: [], error: 'Unknown model id' }
+    return resetCache(entry)
+  })
+
+  // ai:unload → unload current model.
+  ipcMain.handle('ai:unload', async () => {
+    const id = getActiveModelId()
+    if (!id) return { success: true }
+    try {
+      await unloadCurrent(id)
+      return { success: true }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to unload model'
+      return { success: false, error: message }
+    }
+  })
+
+  // Lightweight status shim for renderer polling / hydration.
+  ipcMain.handle('ai:getStatus', () => {
+    const s = buildModelsStatus()
+    return {
+      isReady: s.active.loaded,
+      modelName: s.active.name || (s.active.loaded ? 'Model' : ''),
+      uptime: s.active.loadedAt ? Math.floor((Date.now() - s.active.loadedAt) / 1000) : 0,
+      downloading: s.active.requestId !== null,
+      downloadProgress: 0
+    }
+  })
+
+  // Per-load configuration (ctx_size + tools). Mirrored into qvac
+  // so the modal can change settings without first unloading.
+  ipcMain.handle('ai-config:get', () => modelStore.getAiConfig())
+  ipcMain.handle('ai-config:set', (_evt, config) => {
+    const ctx = Number(config?.ctx_size)
+    if (![2048, 4096, 8192].includes(ctx)) {
+      throw new Error(`Unsupported ctx_size: ${config?.ctx_size}`)
+    }
+    const tools = !!config?.tools
+    modelStore.setAiConfig({ ctx_size: ctx, tools })
+    setActiveConfig({ ctx_size: ctx, tools })
+    return { success: true }
+  })
+
+  console.log('Models / AI IPC handlers registered')
+}
+
 function handleDeepLink(url) {
   console.log('deep link:', url)
 }
@@ -271,16 +418,32 @@ if (!lock) {
   })
 
   app.whenReady().then(() => {
+    // Write qvac.config.json BEFORE any SDK call so the worker writes
+    // its cache to a path we can inspect + reset.
+    ensureQvacConfig()
+
+    // AI / Models IPC must be registered before the renderer fires its
+    // first invoke; the renderer's useAI() hydrates status() on mount.
+    registerModelsIpc()
+
     createWindow().catch((err) => {
       console.error('Failed to create window:', err)
       app.quit()
     })
 
+    // Hand the BrowserWindow off to the QVAC layer so it can push
+    // `models:progress` / `models:error` events.
+    setMainWindow(BrowserWindow.getAllWindows()[0] ?? null)
+
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow().catch((err) => {
-          console.error('Failed to create window:', err)
-        })
+        createWindow()
+          .then(() => {
+            setMainWindow(BrowserWindow.getAllWindows()[0] ?? null)
+          })
+          .catch((err) => {
+            console.error('Failed to create window:', err)
+          })
       }
     })
   })
@@ -288,6 +451,25 @@ if (!lock) {
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
       app.quit()
+    }
+  })
+
+  // Cancel any in-flight request and unload the model on quit so we
+  // don't leave partial cache files behind or a hanging worker.
+  app.on('before-quit', async () => {
+    try {
+      await cancelCurrentRequest({ clearCache: true })
+    } catch (e) {
+      console.warn('[qvac] before-quit cancel failed:', e)
+    }
+    const modelId = getActiveModelId()
+    if (modelId) {
+      try {
+        await unloadCurrent(modelId)
+        console.log('[qvac] Model unloaded on exit')
+      } catch (error) {
+        console.error('Failed to unload model:', error)
+      }
     }
   })
 }

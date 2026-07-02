@@ -35,5 +35,32 @@ contextBridge.exposeInMainWorld('bridge', {
   },
   writeWorkerIPC: (specifier, data) => {
     return ipcRenderer.invoke('pear:worker:writeIPC:' + specifier, data)
+  },
+  // Phase 5: local AI model selection + load surface.
+  models: {
+    list: () => ipcRenderer.invoke('models:list'),
+    add: (entry) => ipcRenderer.invoke('models:add', entry),
+    remove: (id) => ipcRenderer.invoke('models:remove', id),
+    select: (id) => ipcRenderer.invoke('models:select', id),
+    cancel: (opts) => ipcRenderer.invoke('models:cancel', opts),
+    resetCache: (id) => ipcRenderer.invoke('models:resetCache', id),
+    status: () => ipcRenderer.invoke('models:status'),
+    pickFile: () => ipcRenderer.invoke('models:pickFile'),
+    onProgress: (cb) => {
+      const handler = (_evt, p) => cb(p)
+      ipcRenderer.on('models:progress', handler)
+      return () => ipcRenderer.removeListener('models:progress', handler)
+    },
+    onError: (cb) => {
+      const handler = (_evt, e) => cb(e)
+      ipcRenderer.on('models:error', handler)
+      return () => ipcRenderer.removeListener('models:error', handler)
+    }
+  },
+  ai: {
+    getStatus: () => ipcRenderer.invoke('ai:getStatus'),
+    unload: () => ipcRenderer.invoke('ai:unload'),
+    getConfig: () => ipcRenderer.invoke('ai-config:get'),
+    setConfig: (config) => ipcRenderer.invoke('ai-config:set', config)
   }
 })

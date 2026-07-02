@@ -4,6 +4,19 @@
 // `window.bridge` is undefined; we fall back to a no-op stub so the UI
 // still mounts and Phase 1 reducer actions work — only the P2P worker
 // side effects are silently skipped.
+//
+// Phase 5 adds the `models` + `ai` blocks for local AI selection,
+// ported from `C:\projects\tamaflow\desktop-app\src\preload\index.ts`.
+
+import type {
+  AiConfig,
+  AiStatusShim,
+  ModelAddInput,
+  ModelEntry,
+  ModelErrorPayload,
+  ModelLoadProgress,
+  ModelStatus
+} from '../ai/types'
 
 export interface Pkg {
   name: string
@@ -23,6 +36,25 @@ export interface BridgeAPI {
   onWorkerIPC(specifier: string, listener: (data: Uint8Array) => void): () => void
   onWorkerExit(specifier: string, listener: (code: number | null) => void): () => void
   writeWorkerIPC(specifier: string, data: string | Uint8Array): Promise<void>
+
+  models: {
+    list(): Promise<ModelEntry[]>
+    add(entry: ModelAddInput): Promise<ModelEntry>
+    remove(id: string): Promise<boolean>
+    select(id: string): Promise<{ success: boolean; error?: string }>
+    cancel(opts?: { clearCache?: boolean }): Promise<{ success: boolean }>
+    resetCache(id: string): Promise<{ success: boolean; deleted: string[]; error?: string }>
+    status(): Promise<ModelStatus>
+    pickFile(): Promise<string | null>
+    onProgress(cb: (p: ModelLoadProgress) => void): () => void
+    onError(cb: (e: ModelErrorPayload) => void): () => void
+  }
+  ai: {
+    getStatus(): Promise<AiStatusShim>
+    unload(): Promise<{ success: boolean; error?: string }>
+    getConfig(): Promise<AiConfig>
+    setConfig(config: AiConfig): Promise<{ success: boolean }>
+  }
 }
 
 // Worker specifiers. Picked by the renderer when calling
@@ -41,7 +73,46 @@ const noopBridge: BridgeAPI = {
   onWorkerStderr: () => () => {},
   onWorkerIPC: () => () => {},
   onWorkerExit: () => () => {},
-  writeWorkerIPC: () => Promise.resolve()
+  writeWorkerIPC: () => Promise.resolve(),
+  models: {
+    list: () => Promise.resolve([]),
+    add: () => Promise.reject(new Error('bridge not available')),
+    remove: () => Promise.resolve(false),
+    select: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+    cancel: () => Promise.resolve({ success: false }),
+    resetCache: () =>
+      Promise.resolve({ success: false, deleted: [], error: 'bridge not available' }),
+    status: () =>
+      Promise.resolve({
+        active: {
+          id: null,
+          name: '',
+          source: '',
+          sourceKind: null,
+          loaded: false,
+          requestId: null,
+          loadedAt: null
+        },
+        lastSelectedId: null,
+        available: []
+      }),
+    pickFile: () => Promise.resolve(null),
+    onProgress: () => () => {},
+    onError: () => () => {}
+  },
+  ai: {
+    getStatus: () =>
+      Promise.resolve({
+        isReady: false,
+        modelName: '',
+        uptime: 0,
+        downloading: false,
+        downloadProgress: 0
+      }),
+    unload: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+    getConfig: () => Promise.resolve({ ctx_size: 4096, tools: false }),
+    setConfig: () => Promise.resolve({ success: false })
+  }
 }
 
 export const bridge: BridgeAPI =
