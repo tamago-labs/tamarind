@@ -153,6 +153,74 @@ schema.register({
   fields: [{ name: 'ids', type: 'json', required: true }]
 })
 
+// Phase 2: per-writer AI state (which model each peer has loaded and
+// whether it's currently accepting requests). One row per writer,
+// keyed by `writerKey`. `accepting` flips to false during an in-flight
+// completion so peers can see when a model is busy. `modelId` and
+// `modelName` are null when no model is loaded.
+schema.register({
+  name: 'ai-state',
+  fields: [
+    { name: 'writerKey', type: 'buffer', required: true },
+    { name: 'modelId', type: 'string', required: false },
+    { name: 'modelName', type: 'string', required: false },
+    { name: 'loadedAt', type: 'int', required: false },
+    { name: 'accepting', type: 'bool', required: true }
+  ]
+})
+
+// Dispatch payload for the writer's own AI state update. Mirrors the
+// fields on `ai-state` minus the writerKey (the worker fills that in
+// from the local writer's key when it routes the dispatch).
+schema.register({
+  name: 'ai-state-update',
+  fields: [
+    { name: 'modelId', type: 'string', required: false },
+    { name: 'modelName', type: 'string', required: false },
+    { name: 'loadedAt', type: 'int', required: false },
+    { name: 'accepting', type: 'bool', required: true }
+  ]
+})
+
+// Phase 3: P2P completion routing. A requester encodes a chat-completion
+// payload and pins it at the owner's writer key. The owner runs the
+// local inference and streams the result back as a sequence of
+// `relay-response` records with the same `requestId`. We do NOT
+// include `messages` in the `relay-response` because the requester
+// already has them — only deltas/error/done are echoed back.
+schema.register({
+  name: 'relay-request',
+  fields: [
+    { name: 'requestId', type: 'string', required: true },
+    { name: 'fromKey', type: 'buffer', required: true },
+    { name: 'toKey', type: 'buffer', required: true },
+    { name: 'messages', type: 'json', required: true },
+    { name: 'modelId', type: 'string', required: true },
+    { name: 'createdAt', type: 'int', required: true }
+  ]
+})
+
+schema.register({
+  name: 'relay-response',
+  fields: [
+    { name: 'requestId', type: 'string', required: true },
+    { name: 'fromKey', type: 'buffer', required: true },
+    { name: 'toKey', type: 'buffer', required: true },
+    { name: 'kind', type: 'string', required: true },
+    { name: 'text', type: 'string', required: false },
+    { name: 'error', type: 'json', required: false }
+  ]
+})
+
+schema.register({
+  name: 'relay-cancel',
+  fields: [
+    { name: 'requestId', type: 'string', required: true },
+    { name: 'fromKey', type: 'buffer', required: true },
+    { name: 'toKey', type: 'buffer', required: true }
+  ]
+})
+
 Hyperschema.toDisk(hyperSchema)
 
 // ── Collections ─────────────────────────────────────────────────────
@@ -183,6 +251,36 @@ db.collections.register({
   key: ['id']
 })
 
+// Per-writer AI state. One row per writer key; the worker upserts
+// this whenever the local writer's AI state changes.
+db.collections.register({
+  name: 'ai-state',
+  schema: '@tamarind/ai-state',
+  key: ['writerKey']
+})
+
+// P2P completion relay. We index both `relay-request` and
+// `relay-response` by `requestId` so the worker can scan a specific
+// in-flight request efficiently. The `relay-cancel` row is consumed
+// once and removed by the owner.
+db.collections.register({
+  name: 'relay-request',
+  schema: '@tamarind/relay-request',
+  key: ['requestId']
+})
+
+db.collections.register({
+  name: 'relay-response',
+  schema: '@tamarind/relay-response',
+  key: ['requestId', 'fromKey']
+})
+
+db.collections.register({
+  name: 'relay-cancel',
+  schema: '@tamarind/relay-cancel',
+  key: ['requestId']
+})
+
 HyperdbBuilder.toDisk(hyperdb)
 
 // ── Dispatch routes ────────────────────────────────────────────────
@@ -206,5 +304,13 @@ dispatch.register({ name: 'remove-items', requestType: '@tamarind/items-remove' 
 
 dispatch.register({ name: 'add-chat', requestType: '@tamarind/chat-msg' })
 dispatch.register({ name: 'remove-chats', requestType: '@tamarind/chats-remove' })
+
+// Phase 2 + 3 routes. The worker reads the local AI state via
+// `getLocalAiStateSnapshot()` and stamps the writer key + fields
+// when the request lands.
+dispatch.register({ name: 'update-ai-state', requestType: '@tamarind/ai-state-update' })
+dispatch.register({ name: 'relay-request', requestType: '@tamarind/relay-request' })
+dispatch.register({ name: 'relay-response', requestType: '@tamarind/relay-response' })
+dispatch.register({ name: 'relay-cancel', requestType: '@tamarind/relay-cancel' })
 
 Hyperdispatch.toDisk(hyperdispatch)

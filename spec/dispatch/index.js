@@ -21,8 +21,12 @@ class Router {
     this._handler10 = null
     this._handler11 = null
     this._handler12 = null
+    this._handler13 = null
+    this._handler14 = null
+    this._handler15 = null
+    this._handler16 = null
 
-    this._missing = 13
+    this._missing = 17
   }
 
   add (name, handler) {
@@ -66,6 +70,18 @@ class Router {
       case '@tamarind/remove-chats':
         this._handler12 = handler
         break
+      case '@tamarind/update-ai-state':
+        this._handler13 = handler
+        break
+      case '@tamarind/relay-request':
+        this._handler14 = handler
+        break
+      case '@tamarind/relay-response':
+        this._handler15 = handler
+        break
+      case '@tamarind/relay-cancel':
+        this._handler16 = handler
+        break
       default:
         throw DispatchError.NONEXISTENT_ROUTE(name)
     }
@@ -86,6 +102,10 @@ class Router {
     assert(this._handler10 !== null, 'Missing handler for "@tamarind/remove-items"')
     assert(this._handler11 !== null, 'Missing handler for "@tamarind/add-chat"')
     assert(this._handler12 !== null, 'Missing handler for "@tamarind/remove-chats"')
+    assert(this._handler13 !== null, 'Missing handler for "@tamarind/update-ai-state"')
+    assert(this._handler14 !== null, 'Missing handler for "@tamarind/relay-request"')
+    assert(this._handler15 !== null, 'Missing handler for "@tamarind/relay-response"')
+    assert(this._handler16 !== null, 'Missing handler for "@tamarind/relay-cancel"')
   }
 
   async dispatch (message, context) {
@@ -124,6 +144,14 @@ class Router {
         return this._handler11(op.value, context)
       case 12:
         return this._handler12(op.value, context)
+      case 13:
+        return this._handler13(op.value, context)
+      case 14:
+        return this._handler14(op.value, context)
+      case 15:
+        return this._handler15(op.value, context)
+      case 16:
+        return this._handler16(op.value, context)
       default:
         throw DispatchError.HANDLER_NOT_FOUND_BY_ID(op.id)
     }
@@ -235,6 +263,30 @@ const route12 = {
   enc: getEncoding('@tamarind/chats-remove')
 }
 
+const route13 = {
+  name: '@tamarind/update-ai-state',
+  id: 13,
+  enc: getEncoding('@tamarind/ai-state-update')
+}
+
+const route14 = {
+  name: '@tamarind/relay-request',
+  id: 14,
+  enc: getEncoding('@tamarind/relay-request')
+}
+
+const route15 = {
+  name: '@tamarind/relay-response',
+  id: 15,
+  enc: getEncoding('@tamarind/relay-response')
+}
+
+const route16 = {
+  name: '@tamarind/relay-cancel',
+  id: 16,
+  enc: getEncoding('@tamarind/relay-cancel')
+}
+
 function getRouteByName (name) {
   switch (name) {
     case '@tamarind/add-writer':
@@ -263,6 +315,14 @@ function getRouteByName (name) {
       return route11
     case '@tamarind/remove-chats':
       return route12
+    case '@tamarind/update-ai-state':
+      return route13
+    case '@tamarind/relay-request':
+      return route14
+    case '@tamarind/relay-response':
+      return route15
+    case '@tamarind/relay-cancel':
+      return route16
     default:
       throw DispatchError.ROUTE_NOT_FOUND_BY_NAME(name)
   }
@@ -296,6 +356,14 @@ function getRouteById (id) {
       return route11
     case 12:
       return route12
+    case 13:
+      return route13
+    case 14:
+      return route14
+    case 15:
+      return route15
+    case 16:
+      return route16
     default:
       throw DispatchError.HANDLER_NOT_FOUND_BY_ID(id)
   }

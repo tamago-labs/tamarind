@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "schema": [
     {
       "name": "writer",
@@ -382,6 +382,190 @@
           "required": true,
           "type": "json",
           "version": 1
+        }
+      ]
+    },
+    {
+      "name": "ai-state",
+      "namespace": "tamarind",
+      "compact": false,
+      "flagsPosition": 1,
+      "fields": [
+        {
+          "name": "writerKey",
+          "required": true,
+          "type": "buffer",
+          "version": 2
+        },
+        {
+          "name": "modelId",
+          "required": false,
+          "type": "string",
+          "version": 2
+        },
+        {
+          "name": "modelName",
+          "required": false,
+          "type": "string",
+          "version": 2
+        },
+        {
+          "name": "loadedAt",
+          "required": false,
+          "type": "int",
+          "version": 2
+        },
+        {
+          "name": "accepting",
+          "required": false,
+          "type": "bool",
+          "version": 2
+        }
+      ]
+    },
+    {
+      "name": "ai-state-update",
+      "namespace": "tamarind",
+      "compact": false,
+      "flagsPosition": 0,
+      "fields": [
+        {
+          "name": "modelId",
+          "required": false,
+          "type": "string",
+          "version": 2
+        },
+        {
+          "name": "modelName",
+          "required": false,
+          "type": "string",
+          "version": 2
+        },
+        {
+          "name": "loadedAt",
+          "required": false,
+          "type": "int",
+          "version": 2
+        },
+        {
+          "name": "accepting",
+          "required": false,
+          "type": "bool",
+          "version": 2
+        }
+      ]
+    },
+    {
+      "name": "relay-request",
+      "namespace": "tamarind",
+      "compact": false,
+      "flagsPosition": -1,
+      "fields": [
+        {
+          "name": "requestId",
+          "required": true,
+          "type": "string",
+          "version": 2
+        },
+        {
+          "name": "fromKey",
+          "required": true,
+          "type": "buffer",
+          "version": 2
+        },
+        {
+          "name": "toKey",
+          "required": true,
+          "type": "buffer",
+          "version": 2
+        },
+        {
+          "name": "messages",
+          "required": true,
+          "type": "json",
+          "version": 2
+        },
+        {
+          "name": "modelId",
+          "required": true,
+          "type": "string",
+          "version": 2
+        },
+        {
+          "name": "createdAt",
+          "required": true,
+          "type": "int",
+          "version": 2
+        }
+      ]
+    },
+    {
+      "name": "relay-response",
+      "namespace": "tamarind",
+      "compact": false,
+      "flagsPosition": 4,
+      "fields": [
+        {
+          "name": "requestId",
+          "required": true,
+          "type": "string",
+          "version": 2
+        },
+        {
+          "name": "fromKey",
+          "required": true,
+          "type": "buffer",
+          "version": 2
+        },
+        {
+          "name": "toKey",
+          "required": true,
+          "type": "buffer",
+          "version": 2
+        },
+        {
+          "name": "kind",
+          "required": true,
+          "type": "string",
+          "version": 2
+        },
+        {
+          "name": "text",
+          "required": false,
+          "type": "string",
+          "version": 2
+        },
+        {
+          "name": "error",
+          "required": false,
+          "type": "json",
+          "version": 2
+        }
+      ]
+    },
+    {
+      "name": "relay-cancel",
+      "namespace": "tamarind",
+      "compact": false,
+      "flagsPosition": -1,
+      "fields": [
+        {
+          "name": "requestId",
+          "required": true,
+          "type": "string",
+          "version": 2
+        },
+        {
+          "name": "fromKey",
+          "required": true,
+          "type": "buffer",
+          "version": 2
+        },
+        {
+          "name": "toKey",
+          "required": true,
+          "type": "buffer",
+          "version": 2
         }
       ]
     }

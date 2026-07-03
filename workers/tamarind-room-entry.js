@@ -11,6 +11,7 @@
 // protocol documented in `C:\Users\pisut\.claude\plans\nested-beaming-reef.md`.
 
 const Autobase = require('autobase')
+const b4a = require('b4a')
 const Corestore = require('corestore')
 const debounce = require('debounceify')
 const FramedStream = require('framed-stream')
@@ -129,16 +130,76 @@ class TamarindRoomWorkerTask extends ReadyResource {
         return
       }
       console.log(
-        `[tamarind-room] frame from renderer: type=${message && message.type}`,
+        `[tamarind-room] frame: type=${message && message.type}`,
         message && message.type === 'state-action'
           ? `action=${JSON.stringify(message.action).slice(0, 200)}`
           : ''
       )
+      // Phase 7 + 8: these frames come from main (not the renderer)
+      // and trigger P2P actions on the local writer's behalf.
+      if (message && message.type === 'ai-state-snapshot') {
+        this.room
+          .appendAiState(message.snapshot || {})
+          .then(() => this.debounceBroadcast())
+          .catch((err) => console.error('[tamarind-room] appendAiState failed:', err))
+        return
+      }
+      if (message && message.type === 'relay-request') {
+        this.room
+          .appendRelayRequest(message)
+          .catch((err) => console.error('[tamarind-room] appendRelayRequest failed:', err))
+        return
+      }
+      if (message && message.type === 'relay-cancel') {
+        this.room
+          .appendRelayCancel(message)
+          .catch((err) => console.error('[tamarind-room] appendRelayCancel failed:', err))
+        return
+      }
       this._onFrame(message).catch((err) => {
         console.error('[tamarind-room] _onFrame threw:', err)
         this.pipe.write(JSON.stringify({ type: 'status', phase: 'error', error: err.message }))
       })
     })
+
+    // Phase 8: relay route handlers. When a peer's `relay-request`
+    // lands at this writer (`toKey === myKey`), ask main to run a
+    // local completion. When a `relay-response` from a peer arrives,
+    // forward to main so it can push to the renderer's
+    // `ai:chat:relay-event` channel.
+    this.room.onRelayRequest = (data) => {
+      const myKey = z32.encode(this.identity.key)
+      if (data.toKey !== myKey) return
+      // data.toKey is z32; data.fromKey is the same. Convert fromKey
+      // back to hex for the local relay-run write — main keeps the
+      // canonical writer-key in z32 too.
+      this.pipe.write(
+        JSON.stringify({
+          type: 'relay-run',
+          requestId: data.requestId,
+          fromKey: data.fromKey,
+          messages: data.messages,
+          modelId: data.modelId
+        })
+      )
+    }
+    this.room.onRelayResponse = (data) => {
+      // I'm the requester. Push the event to the renderer via main.
+      this.pipe.write(
+        JSON.stringify({
+          type: 'relay-event',
+          requestId: data.requestId,
+          kind: data.kind,
+          text: data.text ?? null,
+          error: data.error ?? null
+        })
+      )
+    }
+    this.room.onRelayCancel = (data) => {
+      const myKey = z32.encode(this.identity.key)
+      if (data.toKey !== myKey) return
+      this.pipe.write(JSON.stringify({ type: 'relay-cancel', requestId: data.requestId }))
+    }
 
     await this._broadcast()
   }
@@ -239,20 +300,34 @@ class TamarindRoomWorkerTask extends ReadyResource {
       console.log(
         `[tamarind-room] _broadcast start (peers=${this.peers}, boards=${boards.length}, writable=${this.room.isWritable()})`
       )
-      const [snapshot, messages] = await Promise.all([
+      const [snapshot, messages, aiStatesRaw] = await Promise.all([
         this.room.buildSnapshot(),
-        this.room.getMessages()
+        this.room.getMessages(),
+        this.room.getAiStates()
       ])
       messages.sort((a, b) => {
         const aAt = a.info?.at ?? 0
         const bAt = b.info?.at ?? 0
         return aAt - bAt
       })
+      // Map writerKey from hex (storage format) to z32 (chat-attribution
+      // format) so the renderer can join against `useRoom.me.key`
+      // without an extra lookup. We also need the display name of each
+      // writer; the local worker has only its own name. Remote names
+      // fall back to the z32 key prefix — same convention as chat.
+      const aiStates = aiStatesRaw.map((s) => ({
+        writerKey: z32.encode(b4a.from(s.writerKey, 'hex')),
+        modelId: s.modelId,
+        modelName: s.modelName,
+        loadedAt: s.loadedAt,
+        accepting: s.accepting
+      }))
       console.log(
-        `[tamarind-room] _broadcast emit (boards=${snapshot.boards.length}, items=${snapshot.items.length}, chat=${messages.length})`
+        `[tamarind-room] _broadcast emit (boards=${snapshot.boards.length}, items=${snapshot.items.length}, chat=${messages.length}, ai=${aiStates.length})`
       )
       this.pipe.write(JSON.stringify({ type: 'snapshot', state: snapshot }))
       this.pipe.write(JSON.stringify({ type: 'chat', messages }))
+      this.pipe.write(JSON.stringify({ type: 'ai-states', states: aiStates }))
     } catch (err) {
       this.pipe.write(JSON.stringify({ type: 'status', phase: 'error', error: err.message }))
     }

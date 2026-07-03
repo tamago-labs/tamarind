@@ -239,6 +239,45 @@ class TamarindRoom extends ReadyResource {
         await context.view.delete('@tamarind/chat', { id })
       }
     })
+
+    // Phase 7: per-writer AI state. `data._writerKey` is the local
+    // writer's public key encoded as a hex string (the underscore
+    // prefix avoids the schema's `writerKey: buffer` field, which
+    // would otherwise force us to ship a Buffer through the dispatch
+    // payload). Convert back to a Buffer here for the HyperDB key
+    // encoder — `view.get` / `view.insert` expect a Buffer for any
+    // `buffer`-typed key field.
+    this.router.add('@tamarind/update-ai-state', async (data, context) => {
+      const writerKey = b4a.from(data._writerKey, 'hex')
+      await applyUpdate(context.view, '@tamarind/ai-state', { writerKey }, (existing) => ({
+        writerKey,
+        modelId: data.modelId ?? null,
+        modelName: data.modelName ?? null,
+        loadedAt: data.loadedAt ?? null,
+        accepting: !!data.accepting
+      }))
+    })
+
+    // Phase 8: P2P completion relay. The route handlers run inside
+    // the worker (not in main), so the actual `completion()` call
+    // has to bounce through main via a `relay-run` frame. The
+    // route's job is just to forward — `onRelayRequest` and
+    // `onRelayResponse` are wired in the entry file.
+    this.router.add('@tamarind/relay-request', async (data, context) => {
+      if (typeof this.onRelayRequest === 'function') {
+        this.onRelayRequest(data)
+      }
+    })
+    this.router.add('@tamarind/relay-response', async (data, context) => {
+      if (typeof this.onRelayResponse === 'function') {
+        this.onRelayResponse(data)
+      }
+    })
+    this.router.add('@tamarind/relay-cancel', async (data, context) => {
+      if (typeof this.onRelayCancel === 'function') {
+        this.onRelayCancel(data)
+      }
+    })
   }
 
   get view() {
@@ -309,6 +348,76 @@ class TamarindRoom extends ReadyResource {
   async addMessage(text, info) {
     const id = Math.random().toString(16).slice(2)
     await this.base.append(TamarindDispatch.encode('@tamarind/add-chat', { id, text, info }))
+  }
+
+  // Phase 7: append the local writer's AI state. Stamps the
+  // `writerKey` from `this.localBase.key` so the row is always
+  // keyed by the writer that produced the dispatch.
+  async appendAiState({ modelId, modelName, loadedAt, accepting }) {
+    const writerKey = b4a.toString(this.localBase.key, 'hex')
+    await this.base.append(
+      TamarindDispatch.encode('@tamarind/update-ai-state', {
+        _writerKey: writerKey,
+        modelId: modelId ?? null,
+        modelName: modelName ?? null,
+        loadedAt: loadedAt ?? null,
+        accepting: !!accepting
+      })
+    )
+  }
+
+  // Phase 7: read every `@tamarind/ai-state` row. Returned as
+  // {writerKey, modelId, modelName, loadedAt, accepting}; the
+  // `writerKey` is the hex writer pubkey. The entry file maps to
+  // z32 for chat-attribution parity.
+  async getAiStates() {
+    const rows = await this.view.find('@tamarind/ai-state', {}).toArray()
+    return rows.map((r) => ({
+      writerKey: b4a.toString(r.writerKey, 'hex'),
+      modelId: r.modelId ?? null,
+      modelName: r.modelName ?? null,
+      loadedAt: r.loadedAt ?? null,
+      accepting: !!r.accepting
+    }))
+  }
+
+  // Phase 8: append a relay request addressed to a specific writer.
+  // The owner's worker route handler picks it up and writes a
+  // `relay-run` frame to its main process.
+  async appendRelayRequest({ requestId, fromKey, toKey, messages, modelId }) {
+    await this.base.append(
+      TamarindDispatch.encode('@tamarind/relay-request', {
+        requestId,
+        fromKey: b4a.from(fromKey, 'hex'),
+        toKey: b4a.from(toKey, 'hex'),
+        messages,
+        modelId,
+        createdAt: Date.now()
+      })
+    )
+  }
+
+  async appendRelayResponse({ requestId, fromKey, toKey, kind, text, error }) {
+    await this.base.append(
+      TamarindDispatch.encode('@tamarind/relay-response', {
+        requestId,
+        fromKey: b4a.from(fromKey, 'hex'),
+        toKey: b4a.from(toKey, 'hex'),
+        kind,
+        text: text ?? null,
+        error: error ?? null
+      })
+    )
+  }
+
+  async appendRelayCancel({ requestId, fromKey, toKey }) {
+    await this.base.append(
+      TamarindDispatch.encode('@tamarind/relay-cancel', {
+        requestId,
+        fromKey: b4a.from(fromKey, 'hex'),
+        toKey: b4a.from(toKey, 'hex')
+      })
+    )
   }
 
   // Per-message + clear-all chat deletion. Empty `ids` means "clear
@@ -526,7 +635,8 @@ function decodeItem(raw) {
   }
   if (raw.arrowStart !== undefined && raw.arrowStart !== null) item.arrowStart = raw.arrowStart
   if (raw.arrowEnd !== undefined && raw.arrowEnd !== null) item.arrowEnd = raw.arrowEnd
-  if (raw.strokePattern !== undefined && raw.strokePattern !== null) item.strokePattern = raw.strokePattern
+  if (raw.strokePattern !== undefined && raw.strokePattern !== null)
+    item.strokePattern = raw.strokePattern
   if (raw.curve !== undefined && raw.curve !== null) item.curve = raw.curve
   if (raw.label !== undefined && raw.label !== null) {
     try {

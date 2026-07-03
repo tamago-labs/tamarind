@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "offset": 0,
   "schema": [
     {
@@ -79,6 +79,30 @@
       "name": "@tamarind/remove-chats",
       "requestType": "@tamarind/chats-remove",
       "version": 1
+    },
+    {
+      "id": 13,
+      "name": "@tamarind/update-ai-state",
+      "requestType": "@tamarind/ai-state-update",
+      "version": 2
+    },
+    {
+      "id": 14,
+      "name": "@tamarind/relay-request",
+      "requestType": "@tamarind/relay-request",
+      "version": 2
+    },
+    {
+      "id": 15,
+      "name": "@tamarind/relay-response",
+      "requestType": "@tamarind/relay-response",
+      "version": 2
+    },
+    {
+      "id": 16,
+      "name": "@tamarind/relay-cancel",
+      "requestType": "@tamarind/relay-cancel",
+      "version": 2
     }
   ]
 }

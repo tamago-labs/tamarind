@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "offset": 0,
   "schema": [
     {
@@ -59,6 +59,67 @@
       "derived": false,
       "key": [
         "id"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "ai-state",
+      "namespace": "tamarind",
+      "id": 4,
+      "type": 1,
+      "version": 2,
+      "versionField": null,
+      "indexes": [],
+      "schema": "@tamarind/ai-state",
+      "derived": false,
+      "key": [
+        "writerKey"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "relay-request",
+      "namespace": "tamarind",
+      "id": 5,
+      "type": 1,
+      "version": 2,
+      "versionField": null,
+      "indexes": [],
+      "schema": "@tamarind/relay-request",
+      "derived": false,
+      "key": [
+        "requestId"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "relay-response",
+      "namespace": "tamarind",
+      "id": 6,
+      "type": 1,
+      "version": 2,
+      "versionField": null,
+      "indexes": [],
+      "schema": "@tamarind/relay-response",
+      "derived": false,
+      "key": [
+        "requestId",
+        "fromKey"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "relay-cancel",
+      "namespace": "tamarind",
+      "id": 7,
+      "type": 1,
+      "version": 2,
+      "versionField": null,
+      "indexes": [],
+      "schema": "@tamarind/relay-cancel",
+      "derived": false,
+      "key": [
+        "requestId"
       ],
       "trigger": null
     }
