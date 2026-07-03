@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 1,
   "offset": 0,
   "schema": [
     {
@@ -67,7 +67,7 @@
       "namespace": "tamarind",
       "id": 4,
       "type": 1,
-      "version": 2,
+      "version": 1,
       "versionField": null,
       "indexes": [],
       "schema": "@tamarind/ai-state",
@@ -82,7 +82,7 @@
       "namespace": "tamarind",
       "id": 5,
       "type": 1,
-      "version": 2,
+      "version": 1,
       "versionField": null,
       "indexes": [],
       "schema": "@tamarind/relay-request",
@@ -97,7 +97,7 @@
       "namespace": "tamarind",
       "id": 6,
       "type": 1,
-      "version": 2,
+      "version": 1,
       "versionField": null,
       "indexes": [],
       "schema": "@tamarind/relay-response",
@@ -113,7 +113,7 @@
       "namespace": "tamarind",
       "id": 7,
       "type": 1,
-      "version": 2,
+      "version": 1,
       "versionField": null,
       "indexes": [],
       "schema": "@tamarind/relay-cancel",

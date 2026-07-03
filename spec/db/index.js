@@ -4,7 +4,7 @@
 const { IndexEncoder, c, b4a } = require('hyperdb/runtime')
 const { version, getEncoding, setVersion } = require('./messages.js')
 
-const versions = { schema: version, db: 2 }
+const versions = { schema: version, db: 1 }
 
 // '@tamarind/boards' collection key
 const collection0_key = new IndexEncoder([
@@ -311,7 +311,7 @@ function collection4_reconstruct_key (keyBuf) {
 const collection4 = {
   name: '@tamarind/ai-state',
   id: 4,
-  version: 2,
+  version: 1,
   encodeKey (record) {
     const key = [record.writerKey]
     return collection4_key.encode(key)
@@ -378,7 +378,7 @@ function collection5_reconstruct_key (keyBuf) {
 const collection5 = {
   name: '@tamarind/relay-request',
   id: 5,
-  version: 2,
+  version: 1,
   encodeKey (record) {
     const key = [record.requestId]
     return collection5_key.encode(key)
@@ -457,7 +457,7 @@ function collection6_reconstruct_key (keyBuf) {
 const collection6 = {
   name: '@tamarind/relay-response',
   id: 6,
-  version: 2,
+  version: 1,
   encodeKey (record) {
     const key = [record.requestId, record.fromKey]
     return collection6_key.encode(key)
@@ -524,7 +524,7 @@ function collection7_reconstruct_key (keyBuf) {
 const collection7 = {
   name: '@tamarind/relay-cancel',
   id: 7,
-  version: 2,
+  version: 1,
   encodeKey (record) {
     const key = [record.requestId]
     return collection7_key.encode(key)

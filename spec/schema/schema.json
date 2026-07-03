@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 1,
   "schema": [
     {
       "name": "writer",
@@ -395,31 +395,31 @@
           "name": "writerKey",
           "required": true,
           "type": "buffer",
-          "version": 2
+          "version": 1
         },
         {
           "name": "modelId",
           "required": false,
           "type": "string",
-          "version": 2
+          "version": 1
         },
         {
           "name": "modelName",
           "required": false,
           "type": "string",
-          "version": 2
+          "version": 1
         },
         {
           "name": "loadedAt",
           "required": false,
           "type": "int",
-          "version": 2
+          "version": 1
         },
         {
           "name": "accepting",
           "required": false,
           "type": "bool",
-          "version": 2
+          "version": 1
         }
       ]
     },
@@ -430,28 +430,34 @@
       "flagsPosition": 0,
       "fields": [
         {
+          "name": "_writerKey",
+          "required": false,
+          "type": "string",
+          "version": 1
+        },
+        {
           "name": "modelId",
           "required": false,
           "type": "string",
-          "version": 2
+          "version": 1
         },
         {
           "name": "modelName",
           "required": false,
           "type": "string",
-          "version": 2
+          "version": 1
         },
         {
           "name": "loadedAt",
           "required": false,
           "type": "int",
-          "version": 2
+          "version": 1
         },
         {
           "name": "accepting",
           "required": false,
           "type": "bool",
-          "version": 2
+          "version": 1
         }
       ]
     },
@@ -465,37 +471,37 @@
           "name": "requestId",
           "required": true,
           "type": "string",
-          "version": 2
+          "version": 1
         },
         {
           "name": "fromKey",
           "required": true,
           "type": "buffer",
-          "version": 2
+          "version": 1
         },
         {
           "name": "toKey",
           "required": true,
           "type": "buffer",
-          "version": 2
+          "version": 1
         },
         {
           "name": "messages",
           "required": true,
           "type": "json",
-          "version": 2
+          "version": 1
         },
         {
           "name": "modelId",
           "required": true,
           "type": "string",
-          "version": 2
+          "version": 1
         },
         {
           "name": "createdAt",
           "required": true,
           "type": "int",
-          "version": 2
+          "version": 1
         }
       ]
     },
@@ -509,37 +515,37 @@
           "name": "requestId",
           "required": true,
           "type": "string",
-          "version": 2
+          "version": 1
         },
         {
           "name": "fromKey",
           "required": true,
           "type": "buffer",
-          "version": 2
+          "version": 1
         },
         {
           "name": "toKey",
           "required": true,
           "type": "buffer",
-          "version": 2
+          "version": 1
         },
         {
           "name": "kind",
           "required": true,
           "type": "string",
-          "version": 2
+          "version": 1
         },
         {
           "name": "text",
           "required": false,
           "type": "string",
-          "version": 2
+          "version": 1
         },
         {
           "name": "error",
           "required": false,
           "type": "json",
-          "version": 2
+          "version": 1
         }
       ]
     },
@@ -553,19 +559,19 @@
           "name": "requestId",
           "required": true,
           "type": "string",
-          "version": 2
+          "version": 1
         },
         {
           "name": "fromKey",
           "required": true,
           "type": "buffer",
-          "version": 2
+          "version": 1
         },
         {
           "name": "toKey",
           "required": true,
           "type": "buffer",
-          "version": 2
+          "version": 1
         }
       ]
     }

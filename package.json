@@ -19,6 +19,8 @@
     "build:worker-specs": "node schema.js",
     "start": "npm run build:worker-specs && concurrently -k -n vite,electron -c blue,green \"npm:dev:vite\" \"npm:dev:electron\"",
     "start:guest": "npm run build:worker-specs && concurrently -k -n vite,electron -c blue,green \"npm:dev:vite:guest\" \"npm:dev:electron:guest\"",
+    "clean:storage": "node scripts/clean-storage.js",
+    "clean:storage:force": "node scripts/clean-storage.js --force",
     "build:renderer": "npm run build:worker-specs && vite build",
     "package": "npm run build:renderer && electron-forge package",
     "make": "npm run build:renderer && electron-forge make"

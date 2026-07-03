@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 1,
   "offset": 0,
   "schema": [
     {
@@ -84,25 +84,25 @@
       "id": 13,
       "name": "@tamarind/update-ai-state",
       "requestType": "@tamarind/ai-state-update",
-      "version": 2
+      "version": 1
     },
     {
       "id": 14,
       "name": "@tamarind/relay-request",
       "requestType": "@tamarind/relay-request",
-      "version": 2
+      "version": 1
     },
     {
       "id": 15,
       "name": "@tamarind/relay-response",
       "requestType": "@tamarind/relay-response",
-      "version": 2
+      "version": 1
     },
     {
       "id": 16,
       "name": "@tamarind/relay-cancel",
       "requestType": "@tamarind/relay-cancel",
-      "version": 2
+      "version": 1
     }
   ]
 }

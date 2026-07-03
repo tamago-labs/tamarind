@@ -169,12 +169,36 @@ schema.register({
   ]
 })
 
-// Dispatch payload for the writer's own AI state update. Mirrors the
-// fields on `ai-state` minus the writerKey (the worker fills that in
-// from the local writer's key when it routes the dispatch).
+// Dispatch payload for the writer's own AI state update. Mirrors
+// the fields on `ai-state` plus a `_writerKey: string` (underscore
+// prefix to keep it out of the collection's key namespace) that
+// carries the writer's public key as a hex string. The local worker
+// stamps `_writerKey` on the outbound dispatch and the route handler
+// decodes it back to a Buffer for the HyperDB key encoder. We use
+// `string` here (not `buffer`) because the dispatch payload is
+// JSON-serialised on the pipe; a hex string survives the round-trip
+// whereas a raw Buffer would need base64 wrapping.
+//
+// WHY THIS FIELD IS HERE: The encoder silently drops fields that
+// aren't in the schema. Without this entry, `data._writerKey`
+// arrived as `undefined` in the route handler,
+// `b4a.from(undefined, 'hex')` returned an empty Buffer, and every
+// peer's `peerAiStates` had `writerKey: ""` — making the renderer-
+// side "Pick a source" UI unselectable and the relay route fail
+// with "targetWriterKey required".
+//
+// SCHEMA CHANGES: We're greenfield — no production data to preserve.
+// When you change ANY dispatch or collection schema (add/remove/
+// rename/reorder fields), wipe the local storage dirs before
+// restarting:
+//   npm run clean:storage
+// Compact-encoding is positional, so any schema change breaks the
+// decoder for old on-disk bytes. Don't ship a schema change
+// without also telling the user to wipe.
 schema.register({
   name: 'ai-state-update',
   fields: [
+    { name: '_writerKey', type: 'string', required: false },
     { name: 'modelId', type: 'string', required: false },
     { name: 'modelName', type: 'string', required: false },
     { name: 'loadedAt', type: 'int', required: false },
