@@ -1,12 +1,8 @@
-// Top toolbar for the canvas. Six groups, left to right:
-//   • Boards menu    — switch active board, add, rename, delete
-//   • Zoom controls   — wheel-zoom presets anchored at cursor centre
-//   • Marquee toggle  — click once to arm, drag empty area to select,
-//                       click again (or press Escape) to disarm
-//   • Shape palette   — rect, ellipse, line, arrow (rect/ellipse
-//                       accept an optional text caption via double-click
-//                       on the shape body)
-//   • Delete          — trash icon for the current selection
+// Top toolbar for the canvas. Five groups, left to right:
+//   • Board file ops  — boards menu, backup, restore, export
+//   • View            — zoom out / percentage / zoom in
+//   • Tools           — marquee, shape palette, templates
+//   • Selection       — delete
 //   • History         — undo / redo
 //
 // Bring-to-front / send-to-back live in the right-side PropertiesDrawer
@@ -15,8 +11,11 @@
 
 import {
   Circle,
+  FolderOpen,
+  LayoutTemplate,
   MousePointerSquareDashed,
   Redo2,
+  Save,
   Spline,
   Square,
   Trash2,
@@ -230,10 +229,10 @@ export function CanvasToolbar({
   return (
     <header
       title={SHORTCUT_HINT}
-      className='relative flex h-12 w-full items-center justify-center border-b border-gray-200 bg-gray-100 px-4'
+      className='relative flex h-12 w-full items-center justify-start border-b border-gray-200 bg-gray-100 px-4'
     >
       <div className='flex items-center gap-1'>
-        {/* Boards menu */}
+        {/* ── Board file ops ─────────────────────────────────────── */}
         <BoardsMenu
           boards={boards}
           activeBoardId={activeBoardId}
@@ -242,9 +241,21 @@ export function CanvasToolbar({
           onRename={onRenameBoard}
           onDelete={onDeleteBoard}
         />
+        <IconButton label='Backup board to file' onClick={onBackup} disabled={!canBackup}>
+          <Save className='h-4 w-4' aria-hidden='true' />
+        </IconButton>
+        <IconButton label='Restore board from file' onClick={onRestore} disabled={!canRestore}>
+          <FolderOpen className='h-4 w-4' aria-hidden='true' />
+        </IconButton>
+        <ExportMenu
+          canExport={canExport}
+          hasSelection={hasSelection}
+          onExportSvg={onExportSvg}
+          onExportPng={onExportPng}
+        />
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 
-        {/* Zoom group */}
+        {/* ── Zoom group ─────────────────────────────────────────── */}
         <IconButton label='Zoom out' onClick={onZoomOut} disabled={!canZoomOut}>
           <ZoomOut className='h-4 w-4' aria-hidden='true' />
         </IconButton>
@@ -262,7 +273,7 @@ export function CanvasToolbar({
         </IconButton>
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 
-        {/* Marquee selector (momentary) */}
+        {/* ── Tools (marquee + shape palette + templates) ────────── */}
         <MomentaryButton
           label='Marquee select (hold and drag on canvas)'
           active={marqueeActive}
@@ -274,7 +285,6 @@ export function CanvasToolbar({
 
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 
-        {/* Shape group */}
         <ShapeButton label='Add rectangle' onClick={() => onAddShape('rect')}>
           <Square className='h-4 w-4' aria-hidden='true' />
         </ShapeButton>
@@ -294,70 +304,18 @@ export function CanvasToolbar({
 
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 
-        {/* Templates */}
-        <button
-          type='button'
-          onClick={onOpenTemplates}
-          aria-label='Templates'
-          title='Templates'
-          className='inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-gray-700 transition hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500'
-        >
-          Templates
-        </button>
-
+        <IconButton label='Templates' onClick={onOpenTemplates}>
+          <LayoutTemplate className='h-4 w-4' aria-hidden='true' />
+        </IconButton>
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 
-        {/* Backup / Restore. Backup is gated on having an active board
-           (always true after bootstrap, but defensively disabled until
-           the worker snapshot lands). Restore is always available — the
-           file picker is cheap; the file's contents decide whether
-           anything gets dispatched. */}
-        <button
-          type='button'
-          onClick={onBackup}
-          disabled={!canBackup}
-          aria-label='Backup board to file'
-          title='Backup board to file'
-          className='inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-gray-700 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-300 disabled:hover:bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500'
-        >
-          Backup
-        </button>
-        <button
-          type='button'
-          onClick={onRestore}
-          disabled={!canRestore}
-          aria-label='Restore board from file'
-          title='Restore board from file'
-          className='inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-gray-700 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:text-gray-300 disabled:hover:bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500'
-        >
-          Restore
-        </button>
-
-        <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
-
-        {/* Visual export (SVG / PNG). Selection-aware: subtitle on
-           each option surfaces whether the export covers the current
-           selection (bbox union) or the visible viewport. Selection
-           state is read from `hasSelection` at click time, not at
-           menu-open time, so toggling selection while the menu is
-           open updates the hint before the user clicks. */}
-        <ExportMenu
-          canExport={canExport}
-          hasSelection={hasSelection}
-          onExportSvg={onExportSvg}
-          onExportPng={onExportPng}
-        />
-
-        <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
-
-        {/* Delete */}
+        {/* ── Selection / History ────────────────────────────────── */}
         <IconButton label='Delete selected' onClick={onDelete} disabled={!hasSelection}>
           <Trash2 className='h-4 w-4' aria-hidden='true' />
         </IconButton>
 
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 
-        {/* History group */}
         <IconButton
           label={`Undo (Cmd/Ctrl+Z)${canUndo ? '' : ' — nothing to undo'}`}
           onClick={onUndo}

@@ -54,7 +54,7 @@ export function NameEditModal({
       open={open}
       onClose={onClose}
       title='Change display name'
-      hint='Your display name for this team.'
+      hint='Your display name for the session.'
       busy={busy}
       icon={<User className='h-5 w-5 text-tamarind-300' aria-hidden='true' />}
       footer={

@@ -7,7 +7,6 @@
 // closes the modal. `CanvasPage.handleInsertTemplate` does the
 // `dispatchAction({type:'add-items', ...})` + selection update.
 
-import { LayoutTemplate } from 'lucide-react'
 import { BaseModal } from './BaseModal'
 import type { BoardScopedItem } from '../canvas/types'
 import { TEMPLATES } from '../data/templates'
@@ -28,8 +27,7 @@ export function TemplatesModal({ open, onClose, onInsert }: TemplatesModalProps)
       open={open}
       onClose={onClose}
       title='Templates'
-      hint='Pick a starting layout — every shape stays draggable and editable.'
-      icon={<LayoutTemplate className='h-5 w-5 text-tamarind-600' aria-hidden='true' />}
+      subtitle='Pre-built layouts for common scenarios.'
       className='max-w-5xl'
       variant='canvas'
       footer={
