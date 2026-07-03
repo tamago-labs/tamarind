@@ -1,15 +1,16 @@
 # Tamarind
 
-> Tactical whiteboard for teams that need to win. Works offline, syncs P2P, AI-assisted. Built on Electron + `pear-runtime`.
+> The tactical whiteboard that works anywhere. Offline-first, P2P synced, AI-assisted.
 
-Internet at stadiums, conference venues, and hackathon halls is terrible. **Tamarind** is the tactical whiteboard that works anyway — sports teams, sales teams, and hackathon crews plan strategy offline, sync P2P with the rest of the team, and get AI-powered suggestions to sharpen their approach, all without the cloud. Built on [Electron][electron] with [pear-runtime][pear-runtime] for P2P distribution and updates.
+Internet is the first thing to fail when teams need it most. Stadiums, conference venues, and hackathon halls often have unreliable or overloaded networks, making real-time collaboration frustrating.
 
-- **Offline-first tactical canvas** — pick a template that fits the moment: football pitch, sales pipeline, system overview, or blank
-- **P2P team sync** — Hyperswarm discovery + Autobase multi-writer; everyone on the same network views and edits the same board, syncing directly between devices when they reconnect
-- **Group chat + invite codes** — empty properties drawer doubles as a chat panel; the host's invite code lives there with a one-click copy button, so anyone on the network can join as a guest
-- **Local AI coach** — QVAC + Qwen bring local model selection to the footer (Phase 5). Pick a model, watch it download + load, see the pill flip to "Loaded — QWEN 1.7B", then open the AI Chat tab for streaming completions. P2P relay lets guest peers chat through the host's loaded model without loading their own.
-- **Tactical whiteboard persistence** — backup/restore plus SVG/PNG export (Phase 4 / 4.5). Every change appended to a Hypercore, giving the team a tamper-evident audit trail for post-game / post-deal / post-hack review
-- **P2P Over-the-Air updates** with update-restart, embedded [bare][bare] runtime workers, multisig production releases
+**Tamarind** is the tactical whiteboard that works anyway — sports teams, sales teams, and hackathon crews plan strategy offline on a shared canvas, sync P2P with the rest of the team using **Pear by Holepunch**, and get AI-powered suggestions to sharpen their approach through **QVAC**, all without the cloud.
+
+- **Offline-first tactical canvas** —  Multi-board collaborative workspace with templates for sports, sales, system design, or a blank canvas.
+- **Peer-to-peer collaboration** — **Hyperswarm** peer discovery with an **Autobase** multi-writer log and **HyperDB** replicated state, enabling conflict-free collaboration without centralized infrastructure.
+- **Built-in team chat** — Share invite codes and communicate alongside your whiteboard.
+- **Local AI assistant** — Execute **Meta Llama**, **Qwen**, and **Gemma** GGUF models locally through **QVAC**, with peer-to-peer AI relay so teammates can use the host's loaded model without downloading their own.
+- **Tactical whiteboard persistence** — Every board operation is appended to **Hypercore**, providing deterministic replay, backup/restore, SVG/PNG export, and a tamper-evident audit trail.
 
 This project is a fork of the [Holepunch `hello-pear-electron` template](https://github.com/holepunchto/hello-pear-electron).
 
