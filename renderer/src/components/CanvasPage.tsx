@@ -52,7 +52,7 @@ import { Marquee } from '../canvas/Marquee'
 import { CanvasFooter } from './CanvasFooter'
 import { CanvasToolbar, type SelectedTool } from './CanvasToolbar'
 import { PropertiesDrawer } from './PropertiesDrawer'
-import { GroupChatPanel } from './GroupChatPanel'
+import { RightDrawer } from './RightDrawer'
 import { TemplatesModal } from './TemplatesModal'
 import { BoardBackupError, buildBackupFilename, parseBackup, serializeBoard } from '../data/boardIO'
 import {
@@ -1405,25 +1405,7 @@ export function CanvasPage() {
           onTransientUpdate={handleTransientUpdate}
           onBringToFront={handleBringToFront}
           onSendToBack={handleSendToBack}
-          emptyPanel={
-            <GroupChatPanel
-              invite={room.invite}
-              peers={room.peers}
-              messages={room.chat}
-              role={room.role}
-              writable={room.writable}
-              me={room.me}
-              onSendChat={room.sendChat}
-              onRemoveChat={(id) => room.removeChats([id])}
-              onClearChat={room.clearChat}
-              onCopyInvite={() => {
-                if (!room.invite) return
-                if (navigator.clipboard?.writeText) {
-                  navigator.clipboard.writeText(room.invite).catch(() => {})
-                }
-              }}
-            />
-          }
+          emptyPanel={<RightDrawer />}
         />
       </div>
       <CanvasFooter />

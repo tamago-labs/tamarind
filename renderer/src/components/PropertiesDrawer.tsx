@@ -65,11 +65,17 @@ export function PropertiesDrawer({
   emptyPanel
 }: PropertiesDrawerProps) {
   if (selectedCount === 0) {
-    if (emptyPanel) return <>{emptyPanel}</>
+    if (emptyPanel) {
+      // Wrap in a flex column with `h-full` so the `RightDrawer`'s
+      // own `h-full` resolves to the full PropertiesDrawer height
+      // (a bare fragment has no box of its own, so `h-full` inside
+      // would resolve to 0).
+      return <div className='flex h-full shrink-0'>{emptyPanel}</div>
+    }
     return (
       <aside
         aria-label='Properties'
-        className='flex w-72 shrink-0 flex-col gap-4 border-l border-gray-200 bg-gray-50 p-4 text-xs text-gray-500'
+        className='flex h-full w-72 shrink-0 flex-col gap-4 border-l border-gray-200 bg-gray-50 p-4 text-xs text-gray-500'
       >
         <SectionTitle>Properties</SectionTitle>
         <p>Select a shape to edit its properties.</p>
@@ -109,13 +115,6 @@ export function PropertiesDrawer({
       aria-label='Properties'
       className='flex w-72 shrink-0 flex-col gap-4 overflow-y-auto border-l border-gray-200 bg-gray-50 p-4'
     >
-      <div>
-        <SectionTitle>Type</SectionTitle>
-        <div className='inline-flex h-7 items-center rounded-md bg-white px-2 text-xs font-medium text-gray-700 ring-1 ring-gray-200'>
-          {item.type}
-        </div>
-      </div>
-
       <div>
         <SectionTitle>Appearance</SectionTitle>
         <Field label='Fill'>

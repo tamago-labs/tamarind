@@ -22,6 +22,21 @@ export type RoomStatus = 'starting' | 'ready' | 'error'
 export type RoomRole = 'host' | 'guest'
 export type Me = { key: string; name: string }
 
+/**
+ * Per-writer AI state replicated via the Autobase. One row per
+ * peer (including the local writer) — see schema.js's
+ * `@tamarind/ai-state` collection. The renderer reads this from
+ * `useRoom.peerAiStates` to populate the Setup tab's
+ * "Chat with this peer" picker.
+ */
+export interface PeerAiState {
+  writerKey: string
+  modelId: string | null
+  modelName: string | null
+  loadedAt: number | null
+  accepting: boolean
+}
+
 export interface RoomState {
   status: RoomStatus
   role: RoomRole | null
@@ -31,6 +46,7 @@ export interface RoomState {
   me: Me | null
   snapshot: SnapshotState | null
   chat: ChatMessage[]
+  peerAiStates: PeerAiState[]
   error: string | null
 }
 
@@ -43,6 +59,7 @@ const initialState: RoomState = {
   me: null,
   snapshot: null,
   chat: [],
+  peerAiStates: [],
   error: null
 }
 
@@ -56,6 +73,7 @@ type RoomEvent =
   | { type: 'chat'; messages: ChatMessage[] }
   | { type: 'peers'; count: number }
   | { type: 'me'; key: string; name: string }
+  | { type: 'ai-states'; states: PeerAiState[] }
 
 // Module-level singleton. `version` is what `useSyncExternalStore`
 // reads as the snapshot — bumping it is how we tell React "the store
@@ -96,6 +114,9 @@ function apply(event: RoomEvent) {
       break
     case 'chat':
       store.chat = event.messages
+      break
+    case 'ai-states':
+      store.peerAiStates = Array.isArray(event.states) ? event.states : []
       break
   }
   bumpAndEmit()
@@ -268,6 +289,7 @@ export function useRoom(): RoomState & {
     me: store.me,
     snapshot: store.snapshot,
     chat: store.chat,
+    peerAiStates: store.peerAiStates,
     error: store.error,
     sendAction,
     sendChat,
@@ -294,6 +316,7 @@ export function __tamarindRoomStoreForTest(): {
       me: store.me ? { ...store.me } : null,
       snapshot: store.snapshot,
       chat: store.chat,
+      peerAiStates: store.peerAiStates,
       error: store.error
     })
   }

@@ -10,12 +10,21 @@
 
 import type {
   AiConfig,
+  AiSource,
   AiStatusShim,
+  ChatDoneEvent,
+  ChatErrorEvent,
+  ChatStatsEvent,
+  ChatStatusEvent,
+  ChatThinkingEvent,
+  ChatTokenEvent,
+  ChatTurn,
   ModelAddInput,
   ModelEntry,
   ModelErrorPayload,
   ModelLoadProgress,
-  ModelStatus
+  ModelStatus,
+  SessionMeta
 } from '../ai/types'
 
 export interface Pkg {
@@ -55,6 +64,85 @@ export interface BridgeAPI {
     getConfig(): Promise<AiConfig>
     setConfig(config: AiConfig): Promise<{ success: boolean }>
   }
+  // Phase 6: streaming chat completions. The four event channels are
+  // subscribe-only — listeners are registered once via these methods
+  // and the returned function unsubscribes. The renderer's `useAIChat`
+  // hook subscribes on mount with empty deps and never re-subscribes
+  // (avoids the my-doctor-ai stale-closure bug).
+  aiChat: {
+    send(args: {
+      messages: ChatTurn[]
+    }): Promise<{ success: boolean; requestId?: string; error?: string }>
+    cancel(): Promise<{ success: boolean; error?: string }>
+    status(): Promise<ChatStatusEvent>
+    onToken(cb: (e: ChatTokenEvent) => void): () => void
+    onThinking(cb: (e: ChatThinkingEvent) => void): () => void
+    onStats(cb: (e: ChatStatsEvent) => void): () => void
+    onDone(cb: (e: ChatDoneEvent) => void): () => void
+    onError(cb: (e: ChatErrorEvent) => void): () => void
+    onStatus(cb: (e: ChatStatusEvent) => void): () => void
+  }
+  // Phase 6: file-based AI chat session store. NOT P2P-replicated.
+  sessions: {
+    list(): Promise<SessionMeta[]>
+    create(): Promise<{ slug: string }>
+    delete(slug: string): Promise<{ success: boolean; error?: string }>
+    clear(slug: string): Promise<{ success: boolean; error?: string }>
+    load(slug: string): Promise<{ success: boolean; messages: ChatTurn[]; error?: string }>
+    save(
+      slug: string,
+      messages: ChatTurn[]
+    ): Promise<{ success: boolean; count?: number; error?: string }>
+  }
+  // Phase 7+: P2P AI source — list of peers' currently-loaded models
+  // (and whether they're accepting requests). Surface for the Setup
+  // tab's "Chat with this peer" picker. The actual routing of the
+  // completion to a peer is owned by `aiChat.send` (Phase 8 wires
+  // the relay path through the same send function).
+  aiSourcePeers(): Promise<
+    Array<{
+      writerKey: string
+      modelId: string | null
+      modelName: string | null
+      accepting: boolean
+    }>
+  >
+  onPeerAiStates(
+    cb: (
+      states: Array<{
+        writerKey: string
+        modelId: string | null
+        modelName: string | null
+        accepting: boolean
+      }>
+    ) => void
+  ): () => void
+  // Phase 7+: AI source persistence deliberately omitted — always
+  // defaults to local on launch (per the user's locked-in decision).
+  aiSourceGet(): Promise<AiSource | null>
+  aiSourceSet(source: AiSource): Promise<{ success: boolean }>
+  // Phase 8: route a chat completion to a peer's loaded model.
+  // `targetWriterKey` is the z32-encoded writer pubkey (use the
+  // writerKey from `peerAiStates`). The peer's worker re-runs the
+  // completion on its local model and streams the result back over
+  // the Autobase; events arrive via `onRelayEvent`.
+  chat: {
+    route(args: {
+      requestId: string
+      targetWriterKey: string
+      messages: ChatTurn[]
+      modelId: string
+    }): Promise<{ success: boolean; error?: string }>
+    routeCancel(requestId: string): Promise<{ success: boolean }>
+  }
+  onRelayEvent(
+    cb: (e: {
+      requestId: string
+      kind: 'started' | 'token' | 'thinking' | 'done' | 'error' | 'busy'
+      text?: string | null
+      error?: { code: string; message: string; retryable: boolean } | null
+    }) => void
+  ): () => void
 }
 
 // Worker specifiers. Picked by the renderer when calling
@@ -112,7 +200,35 @@ const noopBridge: BridgeAPI = {
     unload: () => Promise.resolve({ success: false, error: 'bridge not available' }),
     getConfig: () => Promise.resolve({ ctx_size: 4096, tools: false }),
     setConfig: () => Promise.resolve({ success: false })
-  }
+  },
+  aiChat: {
+    send: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+    cancel: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+    status: () => Promise.resolve({ isStreaming: false, requestId: null, startedAt: null }),
+    onToken: () => () => {},
+    onThinking: () => () => {},
+    onStats: () => () => {},
+    onDone: () => () => {},
+    onError: () => () => {},
+    onStatus: () => () => {}
+  },
+  sessions: {
+    list: () => Promise.resolve([]),
+    create: () => Promise.resolve({ slug: 'main' }),
+    delete: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+    clear: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+    load: () => Promise.resolve({ success: true, messages: [] }),
+    save: () => Promise.resolve({ success: false, error: 'bridge not available' })
+  },
+  aiSourcePeers: () => Promise.resolve([]),
+  onPeerAiStates: () => () => {},
+  aiSourceGet: () => Promise.resolve(null),
+  aiSourceSet: () => Promise.resolve({ success: false }),
+  chat: {
+    route: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+    routeCancel: () => Promise.resolve({ success: false })
+  },
+  onRelayEvent: () => () => {}
 }
 
 export const bridge: BridgeAPI =
