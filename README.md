@@ -14,266 +14,178 @@ Internet is the first thing to fail when teams need it most. Stadiums, conferenc
 
 This project is a fork of the [Holepunch `hello-pear-electron` template](https://github.com/holepunchto/hello-pear-electron).
 
-## The Problem
-
-Stadium WiFi collapses under 50,000 devices. Conference WiFi requires a password the speaker doesn't have. Hackathon venues throttle the moment demos start. **The teams that need to plan together the most are the ones stuck with the worst network.** Tamarind is built for the moment the network is gone.
-
-## What's Built Now
-
-### Tactical canvas
-
-- Four shape types: rectangle, ellipse, connector, and free-floating text. Text is a first-class shape (not just an overlay on rect/ellipse) with a double-click-to-edit on-canvas editor. Connectors unified in Phase 3 — both endpoints expose five ports each, drag-to-create draws a bezier preview, and the property panel exposes start/end arrows, stroke style (solid/dashed/dotted), curve (straight/bezier), and an inline label chip
-- Drag, resize, and connector attachment (connectors stick to shape ports and follow them on drag). Connector endpoints cascade-orphan when their host is deleted
-- Multi-select via marquee, per-shape properties panel (fill, stroke, stroke width, font size, text, z-order, connector style)
-- Transient-update fast path for 60Hz drag previews + non-transient commit on pointerup so the network only sees the final shape position
-- Cascade-orphan semantics for connector deletion replicated identically across peers via the deterministic reducer
-- SVG / PNG export with selection-aware area (selected items → bbox union, else visible viewport). PNG rasterizes at 2× via `<foreignObject>` + canvas; SVG export is browser-preview accurate
-
-### Multi-board
-
-- One Tamarind instance hosts many boards (one per tactic, deal, or idea). Switching boards is local UI state; all boards share the same Autobase + invite
-- Toolbar dropdown for switch / add / rename / delete. The "last board" cannot be deleted — guarded at the UI, reducer, and worker layers
-
-### P2P team sync (Phase 2)
-
-- **Host mode** (default): a fresh Tamarind launch mints a BlindPairing invite, displays it in the empty properties drawer with a copy button, and accepts inbound joiners
-- **Guest mode**: paste the host's invite into the splash's "Join existing board" toggle. Connection establishes over Hyperswarm UDP; guests see the full board state + chat history
-- **Two Bare workers** per app: `workers/main.js` (Pear OTA updater) + `workers/tamarind-room-entry.js` (data plane)
-- **Encrypted Autobase** + HyperDB view with four collections (`boards`, `items`, `chat`, `invites`) keyed by `id`
-- **Per-action CRDT** dispatch — each reducer action becomes one Autobase append. New peers replay the log on join and converge to identical state
-- **Snapshot push** debounced 100ms after every Autobase update
-- **Transient updates stay local** — only the non-transient commit goes over the wire
-
-### Group chat
-
-- Empty properties drawer doubles as a chat panel. Host sees the invite code in the header; both host and guest see chat history with "You" labels for the local writer
-- Per-message delete + clear-all (mirrors the boards/items deletion semantics)
-- Stable attribution by writer pubkey (z32-encoded); two peers with the same display name stay visually distinguishable
-
-### Identity
-
-- Each Tamarind instance generates a writer keypair (via `hypercore-crypto.keyPair()`) on first launch and persists it to `identity.json`
-- Display name editable from the splash's "Your name" modal; stored alongside the key
-- Chat attribution uses the stable writer pubkey for "You" detection, and the mutable display name for the visible label
-
-### Templates
-
-Four static templates ship in `renderer/src/data/templates.ts`:
-
-| Template              | Layout                                                                                                                                                                     |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Football pitch        | 11 labeled player ellipses (GK, LB, CB×2, RB, DM, CM×2, AM, LW, RW) + green pitch + center line/circle + 2 connectors (one with a "pass" label) for a pass-and-run pattern |
-| Basketball half-court | 5 player ellipses (PG, SG, SF, PF, C) + court outline + key + 3pt arc + hoop line                                                                                          |
-| Sales pipeline        | 4 stages (Lead, Qualified, Proposal, Closed) with 3 connecting connectors, final arrow labeled "won" in the middle                                                         |
-| Hackathon system      | Frontend / API / Worker / DB boxes with 4 data-flow connectors                                                                                                             |
-
-Hand-rolled inline SVG thumbnails in `renderer/src/data/templatesThumbnails.tsx` (no headless SVG renderer needed). Insertion bulk-adds via the existing `add-items` reducer action (which `useRoom.sendAction` passes through, fan-out of N `add-item` dispatches to avoid the JSON-Buffer mangler — see HyperDB gotchas below).
-
-### Local AI model selection (Phase 5 — load & infer)
-
-The footer-left pill surfaces AI status and opens the picker on click:
-
-- **Built-in models**: QWEN 1.7B (`registry://qwen3-1.7b-instruct-q4`, ~1.28 GB, low-spec default) + QWEN 4B (`registry://qwen3-4b-instruct-q4-k-m`, ~2.50 GB, higher quality). Builtins are non-removable.
-- **Custom models**: add a `https://` URL or browse for a local `.gguf` file via the native Electron picker. The registry auto-scans `<userData>` on first launch and registers any existing `*.gguf` files automatically.
-- **Model configuration** section exposes a context size dropdown (`2048 / 4096 (default) / 8192` tokens) plus a Tools on/off toggle, both persisted in `<userData>/models.json` under the `aiConfig` key so the pick survives reloads. Config is read by `@qvac/sdk`'s `loadModel({ modelConfig })` on every load.
-- **Lazy opt-in**: nothing loads on startup. The user clicks the pill → picks → watches progress (download for URLs, load for registry) → pill flips green. Click again to unload.
-- **Once loaded**, open the AI Chat tab from the right drawer (toolbar icon), pick a source in the Workspace tab (Local or Host), and start streaming completions.
-- **IPC surface**: `models:{list,add,remove,status,pickFile,select,cancel,resetCache}` + `ai:{getStatus,unload}` + `ai-config:{get,set}` + `ai-chat:{send,cancel,stream-status}` + `sessions:{list,switch,edit,delete,clear}` + push channels `models:progress` / `models:error` / `ai-chat:{token,thinking,done,error}`. QVAC SDK lives in the Electron main process (`electron/qvac.js`) — not a third Bare worker — because the SDK is Node-tested and a worker-spawn would force a second `schema.js` pass.
-
-## The Vision — Phantom Coach
-
-Our long-term vision: a "Phantom Coach" that watches a match video and auto-populates the board with player movements, then delivers real-time voice feedback. Elite-level tactical analysis, accessible from a local youth club to a World Cup squad.
-
-- A computer-vision engine consumes match video and projects player positions onto the canvas in real time
-- A local LLM (Ollama) becomes a voice-driven assistant: _"shift the right-back two meters up, they're overloading your left"_
-- All inference stays on-device — no footage, no telemetry, no cloud round-trips
-
-## Roadmap
-
-### Shipped — v1.0.0
-
-- Electron + Pear runtime shell with P2P-ready build pipeline
-- Tamarind-branded React 19 + TypeScript renderer (Vite + Tailwind v4 + framer-motion + lucide-react)
-- Splash screen, name modal, canvas page
-
-### Shipped — Sprint 1 (tactical canvas)
-
-- Rect / ellipse / connector / text shapes with drag, resize, multi-select, connector handles
-- Properties drawer with shape-specific editors
-- Templates picker (4 layouts) and base modal with theme variants
-- Local persistence via reducer history
-
-### Shipped — Sprint 2 (team P2P)
-
-- Autobase-backed canvas state (boards, items, chat) — multi-writer, encrypted
-- Hyperswarm pairing via BlindPairing invite codes
-- Group chat panel with stable writer-key attribution
-- Multi-board model with rename + delete (with last-board guard at three layers)
-
-### Shipped — Sprint 2.5 (polish)
-
-- Text as a first-class shape with on-canvas double-click editing
-- Splash copy fix ("Preparing Tamarind workspace…")
-- Name modal copy fix ("Your display name for this team")
-- Templates feature end-to-end
-
-### Shipped — Sprint 3 (connector overhaul)
-
-- Unified `connector` type — line and arrow collapse into one shape with `arrowStart` / `arrowEnd` / `strokePattern` / `curve` / `label` fields. No legacy `line`/`arrow` items to migrate
-- Figma-style draw flow — toolbar Connector button arms a draw mode with hover ports on the shape under cursor, drag-to-create, dashed preview + ghost cursor dot + snap rings, sub-8-world-unit accidental clicks dropped
-- Five-port model (top/right/bottom/left/center) per shape, snapped at draw time and on drag
-- ConnectorSection in the property panel — start/end arrows, stroke style (solid/dashed/dotted), curve (straight/bezier), cap (round/butt/square), inline label chip with start/middle/end anchor
-- Schema bump additive only — five new optional string fields on `@tamarind/item`, no migrations
-
-### Shipped — Sprint 4 (data round-trip)
-
-- **Backup** — active board serialized to a `Tamarind board file v1` JSON document (`.tamarind.json` extension). Toolbar button triggers a Blob + anchor download
-- **Restore** — file picker parses the backup, dispatches a single `add-items` for the recovered shapes with fresh ids into the active board. Additive: drops the items into the current board without renaming it. Transient status banner (auto-dismiss 4s) surfaces success/error
-- **Visual export (SVG)** — pure module at `renderer/src/canvas/svgExport.ts`. Selection-aware area: bbox union if items selected, else visible viewport. Self-contained SVG with embedded arrowhead marker + per-shape renderers + text via `<foreignObject>` so the export mirrors the canvas
-- **Visual export (PNG)** — async rasterization via `<canvas>` (Blob → `URL.createObjectURL` → `Image` → `canvas.drawImage` → `canvas.toBlob`). 2× scale for retina. **CSP gotcha**: Tamarind's renderer runs with `img-src 'self' data:` (no `blob:`); the fix is `FileReader.readAsDataURL(svgBlob)` before assigning to `image.src` — data URLs are explicitly allowed. Same trap will hit anyone trying to load a Blob into an `<img>` / `<video>` / `<audio>` under this CSP.
-
-### Shipped — Sprint 5 (local AI model selection)
-
-- **Footer-left AI pill** — surfaces AI status (`not loaded` / `loading… X%` / `Loaded — QWEN X.Y` / `error`) and opens the picker modal on click. Sits left of the existing Worker status pill on the right side of the footer
-- **AIModal** composed from `BaseModal` (variant=`'canvas'`). Four regions: model configuration (context size dropdown + tools toggle), error banner, built-in + custom model lists, add-custom-model form (URL or .gguf file picker)
-- **QVAC SDK in Electron main process** — two new CommonJS modules (`electron/qvac.js`, `electron/modelStore.js`) modeled after TamaFlow's reference. SDK worker is SDK-managed, no third Bare worker spawned
-- **Persisted model registry** — `<userData>/models.json` holds `{ version, models, lastSelectedModelId, aiConfig }`. Pre-seeds the two QWEN builtins on first launch; auto-imports any `*.gguf` already in `userData`; honors `builtin: true` to prevent built-in removal
-- **Per-load model configuration** — `ctx_size ∈ {2048, 4096 (default), 8192}` + `tools: boolean` persisted across reloads in `aiConfig`, mirrored into QVAC on every change so the next load picks up the freshest values without re-fetching
-- **IPC surface** — `models:{list,add,remove,status,pickFile,select,cancel,resetCache}`, `ai:{getStatus,unload}`, `ai-config:{get,set}`, plus push channels `models:progress` (downloading + loading phases) / `models:error` (`{ code, message, retryable }`)
-- **Lazy load only** — no auto-load on startup (user picks a source in the Setup tab)
-
-### Shipped — Sprint 6 (AI inference surface + P2P relay)
-
-- **AI Chat tab (`AIChatTab.tsx`)** — streaming markdown chat against the loaded model. Collapsible `<thinking>` blocks, session management (auto-save, switch, delete, clear), empty state with "Pick a source" CTA. The main session (`chat-<timestamp>`) is auto-created and cannot be deleted, only cleared
-- **Source picker (`SetupTab.tsx`)** — explicit two-option radio: Local (your own loaded model) or Host (a peer who has a model loaded). No auto-fallback, no auto-derivation. If the peer disconnects, the source clears and the user must pick again. The Host option is disabled when no peer has a model loaded
-- **RightDrawer** — 3-tab container (Workspace, Team chat, AI chat). The Workspace tab hosts the source picker; switching between tabs preserves state
-- **Local inference (`electron/aiChat.js`)** — single-flight SDK streaming wrapper around `@qvac/sdk/completion()`. No tools, no system prompt. Forwards events (token, thinking delta, done, error) to the renderer via IPC
-- **Session store (`electron/sessions.js`)** — file-based persistence (`<userData>/ai-sessions.json`). Sessions have programmatic slugs (`chat-<timestamp>`). The main session is pinned and non-deletable. Auto-saves on every assistant response
-- **useAIChat hook** — module-scope singleton that owns the streaming state, session CRUD, and send path dispatch. Handles both local and relay sends. Validates peer source is still present before each send (clears + shows error if peer is gone). 60s watchdog timeout on relay requests
-- **P2P AI relay** — guest peers chat through the host's model without loading their own. Relay path: guest sends `relay-request` → host's `onRelayRequest` matches → host runs `completion()` → streams `relay-response` (token/thinking/done/error) back → guest accumulates into the assistant bubble. Keyed by hex writer keys, with z32→hex conversion at the main-bridge boundary. All relay routes use insert-or-update logic in the worker (first-insert via `view.insert` directly, not `applyUpdate` which returns early when existing is null)
-- **Peer AI state sync** — `ai-state` schema + `update-ai-state` route piggyback on the Autobase. The renderer polled every 5s via `startPeerAiPolling()`, plus push on every Autobase update. `getLocalAiStateSnapshot()` in qvac.js returns the current model state (modelId, modelName, loadedAt, accepting flag). Pushed to the room on model load, unload, and app start
-- **Schema additions** — `ai-state`, `ai-state-update`, `relay-request`, `relay-response`, `relay-cancel` in `schema.js`. All with `_writerKey` field (required: false due to hyperschema evolution rules). Regenerate with `npm run build:worker-specs`; storage wipe required after schema changes
-
-### Roadmap — Sprint 7+ (Phantom Coach MVP)
-
-- **Rule-based weakness/risk analyzer** (MVP) — geometry-only heuristics that flag overloaded zones, weak passing lanes, and defensive gaps. Output as inline annotations on the canvas
-- **Tactical suggestions** — propose formation shifts, mark hints, connector plays based on the analyzed board. Driven by the loaded model with the analyzer's findings in the system prompt
-- **Live cursors + selection presence** — every peer sees the others' cursor + selection overlay in real time
-- **Snap-to-grid + snap-to-edges** — both shape edges and shape-to-shape alignment
-- **Rotation handles** for non-rect shapes
-- **Color swatch palette** — replace native `<input type="color">` with the Tamarind palette
-- **Per-shape font family** — text shapes inherit `var(--font-display)` for v1
-- **Group / ungroup selection**
-- **Lock / hide per item**
-- **Right-click context menu** — delete, duplicate, bring-to-front, send-to-back
-- **Click-to-place spawn** — replace the fixed `(100,100) + 40·n` offset
-- **Vitest unit suite** for `canvasReducer` + `withHistory` (currently covered by smoke tests only)
-- **Schema v2 with proper `ConnectorEnd` discriminated union** — replace the v1 JSON-string shortcut
-- **Multi-room hosting** — each board as its own Autobase (with its own invite code)
-- **Keet-style portable writer-key** — let users bring their identity across machines
-- **Per-writer AI preferences sync via Autobase** — share the loaded model + `aiConfig` with peers
-- **`/c/tmp/smoke.cjs`** — the legacy single-window smoke is broken (expects a worker that never boots in plain-browser mode). Fix by adding `npm run smoke:unit` that spawns electron with `--headless` or a `?bypass-splash=1` query param
-- **Move text-edit flake fix** — the `room-smoke.cjs` text-edit "box 2 never reaches host snapshot" assertion has a latent race; needs `key={id}`-aware focus-blur coordination or a pre-commit on Add-rect
-
-## OS Support
-
-- macOS
-- Linux
-- Windows
-
-## Requirements
-
-- `npm` via [Node.js][nodejs]
-- [`pear`][pear-docs] — `npx pear`
-
 ## Quick Start
 
-### Install
+**Tamarind** is currently under active development. Setup files are not yet available, so you'll need to clone this repository and run it from source.
+
+### Prerequisites
+
+- Node.js 20+
+- npm
+
+### 1. Install dependencies
 
 ```sh
 npm install
 ```
 
-### Run (host — default)
+### 2. Start the host
 
 ```sh
 npm start
 ```
 
-Vite serves the renderer on `:5173`; Electron loads from there with `--no-updates` (avoids the local build being swapped by an OTA update mid-development).
+This launches the host instance. During development, the renderer is served by Vite while the desktop application runs through Electron.
 
-### Run a second window (guest)
+### 3. Start a guest (optional)
+
+To test peer-to-peer collaboration locally, open a second terminal:
 
 ```sh
 npm run start:guest
 ```
 
-This runs Vite on `:5174` and Electron with a separate `--storage ./tmp-tamarind-guest` so the two windows don't share a Corestore. Vite's `strictPort: true` means the second instance fails fast if 5174 is also taken.
+The guest uses a separate local storage directory so it behaves as an independent device.
 
-Once both are running:
+### 4. Connect both peers
 
-1. The host splash mints an invite code in the empty properties drawer
-2. Click the copy button on the invite
-3. The guest splash has a "Join existing board" toggle at the bottom — paste the invite, click Join
-4. Both windows see the same boards + items + chat
-5. The footer-left "AI: not loaded" pill on either window is independently clickable — pick a Qwen model there to load it on this device only
-6. Once the model is loaded, open the right drawer (tab icon in the toolbar) and switch to the **AI Chat** tab. Pick a source in the **Workspace** tab (Local for your own model, Host for the peer's model), then start chatting
-7. Guest sees the host's loaded model in the Host radio option — no need to download or load a model on the guest device
+1. Start the host.
+2. Copy the invite code from the Team panel.
+3. Launch the guest.
+4. Select **Join Existing Board** and paste the invite code.
+5. Both windows will synchronize the same whiteboard, chat history, and AI state over P2P.
 
-### Build distributables
+### 5. Try Local AI
+
+1. Click the **AI** status pill in the footer.
+2. Select **Qwen3-1.7B** or **Qwen3-4B** to download and load through **QVAC**, or import your own custom **GGUF** model.
+3. Open the **AI Chat** tab.
+4. Choose either:
+   - **Local** — use the model loaded on your device.
+   - **Host** — relay AI requests through another peer's loaded model over P2P, without loading a model locally.
+
+### Build
 
 ```sh
-npm run package    # local Electron package
-npm run make       # platform installers (dmg/msix/appimage/snap/flatpak)
+npm run package    # Package the application
+npm run make       # Build platform installers
 ```
 
-`pear` builds (`pear build` / `pear stage` / `pear provision` / `pear multisig`) follow the same workflow as the upstream `hello-pear-electron` template — see the pear docs at [docs.pears.com](https://docs.pears.com).
+For production P2P distribution and multisig releases, Tamarind follows the standard **Pear Runtime** workflow (`pear build`, `pear stage`, `pear provision`, and `pear multisig`).
+
+## What's Available Now
+
+### Offline Tactical Whiteboard
+
+The canvas is designed for tactical planning rather than generic diagramming, with deterministic synchronization across peers.
+
+- Four object types: **rectangle**, **ellipse**, **connector**, and **first-class text** with in-place double-click editing.
+- Figma-style connector workflow with five connection ports per shape, bezier or straight routing, configurable arrows, stroke styles, labels, and snap previews.
+- Rich editing tools including drag, resize, marquee selection, z-order, per-object styling, and connector configuration.
+- Deterministic connector attachment that automatically follows connected shapes during movement and safely orphans connectors when shapes are removed.
+- High-frequency local rendering during drag operations with commit-on-release replication, reducing unnecessary network traffic.
+- SVG and PNG export with selection-aware rendering, plus board backup and restore.
+
+### Multi-Board Workspace
+
+A single Tamarind workspace can contain multiple tactical boards.
+
+- Create, rename, switch, and delete boards from the toolbar.
+- All boards share the same collaboration session and invite code.
+- Last-board protection enforced across the UI, reducer, and worker layers.
+
+### Peer-to-Peer Collaboration
+
+Built entirely on the **Pear Runtime** ecosystem.
+
+- Peer discovery through **Hyperswarm** using invite codes.
+- Multi-writer synchronization powered by **Autobase** with **HyperDB** replicated views.
+- Encrypted replicated collections for boards, canvas items, chat, invitations, and AI state.
+- Every reducer action is replicated as an append-only operation, allowing new peers to replay history and converge deterministically.
+- Snapshot synchronization for fast peer onboarding while transient drag updates remain local until commit.
+- Two embedded Bare workers separate the application runtime from the collaboration data plane.
+- Peer-to-peer over-the-air application updates through Pear Runtime.
+
+### Team Collaboration
+
+Communication is integrated directly into the workspace.
+
+- Built-in group chat with persistent replicated history.
+- Stable writer identities backed by persistent Hypercore keypairs.
+- Editable display names while preserving cryptographic peer identity.
+- Invite-code onboarding without requiring accounts or cloud services.
+
+### Local AI with QVAC
+
+Local AI is integrated directly into the tactical workflow.
+
+- Built-in **Qwen3-1.7B** and **Qwen3-4B** models.
+- Import custom **GGUF** models from disk or remote URLs.
+- Configurable context size and tool support persisted between sessions.
+- Streaming chat with persistent conversation history.
+- Local or Host inference modes.
+- P2P AI relay allows teammates to use another peer's loaded model without downloading a model themselves.
+- Complete IPC pipeline connecting the Electron renderer to the QVAC SDK running in the main process.
+
+### Built-in Templates
+
+Ready-to-use templates for common tactical planning scenarios.
+
+- Football pitch
+- Basketball half-court
+- Sales pipeline
+- Hackathon system architecture
+
+Each template is generated as editable canvas objects rather than static images, allowing teams to immediately modify every element after insertion.
+
+---
+
+## Currently in Development
+
+### Cross-Network P2P
+
+Current collaboration is optimized for peers on the same local network. We're extending the networking layer to support seamless peer-to-peer collaboration across the public internet while keeping the same decentralized architecture.
+
+### AI Tactical Coach
+
+The current release focuses on AI chat. Next, we're enabling AI to interact directly with the whiteboard using tools.
+
+Planned capabilities include:
+
+- Generate complete tactical diagrams from prompts.
+- Create, position, and connect canvas objects automatically.
+- Annotate existing boards with tactical recommendations.
+- Analyze formations and identify weaknesses.
+- Suggest improvements based on the current board state.
+
+### Expanded Template Library
+
+We're extending Tamarind beyond the current four templates with additional tactical layouts for:
+
+- Basketball
+- Volleyball
+- Rugby
+- Baseball
+- Engineering architecture
+- Incident response
+- Product planning
+- Business strategy
+
+### Collaboration Enhancements
+
+Additional capabilities planned during the hackathon include:
+
+- Live cursor presence.
+- Snap-to-grid and smart alignment.
+- Group and ungroup objects.
+- Lock and hide objects.
+- Context menus.
+- Multi-room hosting with independent collaboration sessions.
+- Portable writer identities across devices.
+- Shared AI preferences replicated through Autobase.
 
 ## Architecture
-
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  Electron renderer (React 19)                                            │
-│  ┌────────────────┐  ┌──────────────────────────┐  ┌──────────────────┐ │
-│  │ SplashPage     │→ │ CanvasPage               │→ │ PropertiesDrawer │ │
-│  │ name modal     │  │ useReducer(withHistory)  │  │ empty →          │ │
-│  │ invite CTA     │  │ + useRoom snapshot       │  │  <GroupChatPanel/>│
-│  │ join toggle    │  │ selectedIds (ephemeral)  │  │ selected →       │ │
-│  └────────────────┘  └──────────────────────────┘  │  <ShapeEditor/>  │ │
-│         ▲                       ▲                    └──────────────────┘ │
-│         │ {role, status}        │ {snapshot, chat, peers, invite, me}     │
-│         │ {invite}              │                                           │
-│         └───────── bridge.onWorkerIPC(ROOM_WORKER, cb) ──────────────────┘ │
-└──────────────────────────────────────────────────────────────────────────┘
-                ▲                                  ▲
-                │ writeRoom(frame)                 │ framed Uint8Array
-                │ (state-action, send-chat,        │
-                │  create-invite, join-invite,     │
-                │  rename-self)                    │
-                ▼                                  │
-┌──────────────────────────────────────────────────────────────────────────┐
-│  Bare worker: /workers/tamarind-room.js                                  │
-│  ┌────────────────────────────────────────────────────────────────────┐ │
-│  │ TamarindRoomWorker (extends ReadyResource)                          │ │
-│  │  ├─ Corestore(storage/corestore)                                    │ │
-│  │  ├─ Hyperswarm  (replicates store on every conn)                    │ │
-│  │  ├─ TamarindRoom (extends ReadyResource)                           │ │
-│  │  │   ├─ Autobase (encrypted, multi-writer)                          │ │
-│  │  │   ├─ HyperDB view                                                │ │
-│  │  │   │   ├─ @tamarind/boards    (1 record per board)                │ │
-│  │  │   │   ├─ @tamarind/items     (1 record per shape)               │ │
-│  │  │   │   ├─ @tamarind/chat      (1 record per message)             │ │
-│  │  │   │   └─ @tamarind/invites   (z32 invite codes)                 │ │
-│  │  │   └─ BlindPairing (addMember on host, addCandidate on join)      │ │
-│  └────────────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────────┘
-                  ▲                                     ▲
-                  │ Hyperswarm (UDP, DHT)                │
-                  │ Autobase linearizer + replica pull   │
-                  └─────────────────────────────────────┘
-                                   │
-                          (peer device, optional)
-```
+ 
 
 ### Wire protocol (renderer ↔ TamarindRoom worker)
 
@@ -345,25 +257,6 @@ The AI surface lives in the Electron main process (`electron/qvac.js` + `electro
 
 **Persistence layout** — `<userData>/models.json` holds `{ version, models, lastSelectedModelId, aiConfig }`. `<userData>/ai-sessions.json` holds the AI chat session store (programmatic slugs, `main` pinned). The auto-import runs once on first launch and walks `<userData>` for `*.gguf` files so users don't have to re-pick models they previously dropped in the data dir. Multi-window guests (`npm run start:guest`) use a separate `--storage` so each peer maintains its own registry and session store, just like the Autobase writer key.
 
-### Spec build pipeline
-
-`npm run build:worker-specs` runs `schema.js` which writes `spec/schema/`, `spec/db/`, and `spec/dispatch/`. Both `build:renderer` and `start` run this first via npm scripts.
-
-| Schema constraint                                                          | What to do                                                          |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| hyperschema doesn't accept `double`                                        | use `float64`                                                       |
-| All schemas must be registered _before_ a single `Hyperschema.toDisk` call | calling `toDisk` twice causes "Invalid request type" errors         |
-| hyperschema has no v1 arrays-of-named-records                              | serialise batches as JSON (workaround: see "HyperDB gotchas" below) |
-
-**Schema changes are not backward-compatible.** Compact-encoding is positional — any change to a dispatch or collection schema (add/remove/rename/reorder fields) makes every byte written by the old encoder undecodable by the new one. The project is greenfield so we don't carry production data; whenever you change `schema.js` and regenerate specs, wipe the local storage dirs before restarting:
-
-```sh
-npm run clean:storage        # interactive
-npm run clean:storage:force  # no prompt
-```
-
-The script removes `./tmp-tamarind-guest/` (guest) and `<tmpdir>/pear/Tamarind/` (host).
-
 ### Storage
 
 A storage dir holds the Corestore. In dev this defaults to `<tmpdir>/pear/<name>`. In production it's per-OS:
@@ -384,22 +277,6 @@ Two sibling files live alongside the Corestore in `userData/`:
 | `qvac.config.json`       | Electron main (via `qvac.js`)       | Tells the QVAC SDK where to write its llama.cpp cache (`<userData>/qvac-cache`)                             |
 | `<userData>/qvac-cache/` | QVAC SDK                            | Downloaded model artifacts (`<hash>_<basename>` files), cache-resettable via `bridge.models.resetCache(id)` |
 
-## HyperDB gotchas (worker)
-
-Things that bit us in the worker and are worth knowing before you add another collection or route:
-
-- **HyperDB has no `view.update(collection, query, fn)`.** Only `insert`, `delete`, `get`, `find`, `findOne`, `flush`. Earlier `view.update(...)` calls silently no-op'd (hyperbee interpreted the first arg as a core-refresh opts object) and the local reducer's optimistic edit was reverted on the next snapshot. Use the `applyUpdate` helper at the bottom of `workers/tamarind-room.js`: get → mutate → delete → insert.
-
-- **`view.delete(collection, X)` expects a query object** like `{id: <buffer>}`. Passing the bare id (a Buffer) routes through `collection.encodeKey(X)` which does `X.id` and crashes with `Cannot read properties of undefined (reading 'buffer')`. Always pass `{id: ...}`.
-
-- **`add-items` batch dispatch mangles Buffer fields.** The `@tamarind/add-items` route carries `items: json` (per the schema.js comment that hyperschema has no v1 arrays-of-named-records). `JSON.stringify(buffer)` produces `{"type":"Buffer","data":[byte,byte,…]}` which parses back as a plain object. When the router handler then calls `view.insert('@tamarind/items', item)`, HyperDB's key encoder does `BUFFER.preencode(state, record.id)`, hits `record.id.byteLength === undefined`, sets `state.end += NaN`, and `b4a.allocUnsafe(NaN)` throws "RangeError: Array buffer allocation failed". **Workaround in `workers/tamarind-room.js` `appendItem('add-items')`**: emit N `add-item` dispatches instead of one batch. Each item rides the `@tamarind/item` schema where `id`/`boardId` are typed `buffer`.
-
-- **Optional `float64` fields decode as `0`, not `undefined`.** Combine this with `??` defaults and you get `item.fontSize ?? 12 → 0` because `??` doesn't catch `0`. New shapes had invisible text after the first worker round-trip. Always set a concrete default at creation time.
-
-- **Bootstrap race.** `workers/tamarind-room-entry.js` seeds an Untitled board via `_ensureDefaultBoard()` from `_open()` (one-shot, flag-gated). Earlier code did this inside `_broadcast`; two concurrent broadcasts (one from `_open`, one from the append's own `update` event) would both observe `boards.length === 0` and both append, producing duplicate Untitled boards. Always gate bootstrap with a flag + check `existing.length > 0`.
-
-- **Last-board delete guard.** Enforced at three layers: (1) `BoardsMenu` UI hides the delete button when `boards.length === 1`; (2) `canvasReducer.delete-board` early-returns when `state.boards.length <= 1`; (3) the worker's `delete-board` router handler re-checks `existingBoards.length <= 1` and refuses to append.
-
 ## Development
 
 ### Build commands
@@ -416,42 +293,6 @@ Things that bit us in the worker and are worth knowing before you add another co
 | `npm run lint`               | `prettier --check . && lunte`                                    |
 | `npm run format`             | `prettier --write . && lunte --fix`                              |
 
-### Smoke tests
-
-Two CDP-driven smoke suites in `c:/tmp/`:
-
-| Test                         | What it covers                                                                                                                                                                                                        |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/c/tmp/room-smoke.cjs`      | Two-electron P2P regression: shapes, chat, boards, rename, delete, last-board guard, active-board switch, chat delete + clear. Passes.                                                                                |
-| `/c/tmp/templates-smoke.cjs` | Single-window regression for the `add-items` Buffer-mangling fix — drives a 3-item batch dispatch via the `__tamarind.room` test hook, asserts no worker crash. Passes.                                               |
-| `/c/tmp/smoke.cjs`           | Legacy single-window smoke. **Pre-existing rot** — looks for an "Add note" toolbar button that doesn't exist + expects splash → canvas to resolve without the worker running. Out of scope for Phase 3 (see roadmap). |
-
-The renderer exposes a test hook at `window.__tamarind.room`: `peek()` returns the latest `useRoom` state; `dispatch(action)` fires a raw `{type:'state-action', action}` IPC frame past any UI guards.
-
-### Adding a new template
-
-Templates live in `renderer/src/data/templates.ts` (the catalogue) and `renderer/src/data/templatesThumbnails.tsx` (the SVG previews). Each `Template` has:
-
-```ts
-{
-  id: string
-  name: string
-  description: string
-  build: (boardId: string, now: number) => BoardScopedItem[]
-}
-```
-
-The `build()` factory returns a fresh array of items with placeholder `id`/`boardId`/`updatedAt`/`order: 0` — `CanvasPage.handleInsertTemplate` re-stamps them with the active board + fresh `uid()`s + the current timestamp before dispatching via the existing `add-items` reducer action.
-
-To add a new template:
-
-1. Add a `Template` constant to `templates.ts` (use the existing `rect` / `ellipse` / `text` / `arrow` helpers)
-2. Append it to the `TEMPLATES` array
-3. Add a hand-rolled `<TemplateThumbnail id={tpl.id} />` SVG to `templatesThumbnails.tsx` (use the same viewBox `0 0 160 100` so the modal grid stays consistent)
-
-### Code style
-
-`prettier-config-holepunch` is the formatter; `lunte` is the linter. Both run via `npm run lint` / `npm run format`. TypeScript is checked with `npx tsc --noEmit -p renderer/tsconfig.json`.
 
 ## Troubleshooting
 
@@ -495,11 +336,11 @@ The SDK's subprocess doesn't always exit cleanly when `unloadCurrent(modelId)` r
 
 ## License
 
-Apache-2.0
+MIT
 
 ## Credits
 
-Tamarind is built on the excellent open-source P2P stack from [Holepunch](https://holepunch.com):
+Tamarind is built on the open-source P2P stack from [Holepunch](https://holepunch.com):
 
 - **[hello-pear-electron](https://github.com/holepunchto/hello-pear-electron)** — the upstream Electron + Pear template that Tamarind is forked from
 - **[pear-runtime][pear-runtime]** — P2P runtime that powers application updates
