@@ -98,12 +98,15 @@ export interface BridgeAPI {
   // (and whether they're accepting requests). Surface for the Setup
   // tab's "Chat with this peer" picker. The actual routing of the
   // completion to a peer is owned by `aiChat.send` (Phase 8 wires
-  // the relay path through the same send function).
+  // the relay path through the same send function). `loadedAt` is
+  // replicated from the `@tamarind/ai-state` row (Unix ms, null
+  // when no model is loaded).
   aiSourcePeers(): Promise<
     Array<{
       writerKey: string
       modelId: string | null
       modelName: string | null
+      loadedAt: number | null
       accepting: boolean
     }>
   >
@@ -113,6 +116,7 @@ export interface BridgeAPI {
         writerKey: string
         modelId: string | null
         modelName: string | null
+        loadedAt: number | null
         accepting: boolean
       }>
     ) => void

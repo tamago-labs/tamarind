@@ -11,6 +11,12 @@
 // Thinking: collapsible card, default collapsed when the message is
 // persisted, auto-expanded while streaming (walrus-form-studio
 // pattern).
+//
+// Source selection: explicit, no fallback. The user picks a source
+// in the Workspace tab before the input enables. If the source is a
+// peer and that peer drops from the room, the source is cleared and
+// the user has to pick again — no auto-fallback. `onSwitchToSetup`
+// is the hand-off into the Workspace tab.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight, FileText, Plus, Send, Square, Trash2, X } from 'lucide-react'
@@ -20,7 +26,11 @@ import { useAI } from '../hooks/useAI'
 import { useAIChat } from '../hooks/useAIChat'
 import type { ChatTurn } from '../ai/types'
 
-export function AIChatTab() {
+interface AIChatTabProps {
+  onSwitchToSetup?: () => void
+}
+
+export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
   const ai = useAI()
   const chat = useAIChat()
   const listRef = useRef<HTMLDivElement | null>(null)
@@ -42,20 +52,6 @@ export function AIChatTab() {
     const t = setTimeout(() => setConfirmingClear(false), 4000)
     return () => clearTimeout(t)
   }, [confirmingClear])
-
-  // Promote the local aiSource's `modelId` / `modelName` once the
-  // model is loaded — the placeholder seed in useAIChat only carries
-  // empty strings.
-  useEffect(() => {
-    if (chat.aiSource?.kind !== 'local') return
-    if (chat.aiSource.modelId && chat.aiSource.modelId !== '') return
-    if (!ai.activeModel) return
-    chat.setAiSource({
-      kind: 'local',
-      modelId: ai.activeModel.id,
-      modelName: ai.activeModel.name
-    })
-  }, [ai.activeModel, chat])
 
   const currentSession = useMemo(
     () => chat.sessions.find((s) => s.slug === chat.currentSessionSlug) ?? null,
@@ -100,6 +96,14 @@ export function AIChatTab() {
 
   const isInputDisabled =
     chat.isStreaming || !chat.aiSource || (chat.aiSource.kind === 'local' && !ai.isReady)
+
+  const inputPlaceholder = isInputDisabled
+    ? !chat.aiSource
+      ? 'Pick a source in Workspace to start chatting.'
+      : chat.aiSource.kind === 'local' && !ai.isReady
+        ? 'No model loaded on this device.'
+        : 'Type a message…'
+    : 'Type a message…'
 
   return (
     <div className='flex h-full flex-col gap-2'>
@@ -153,10 +157,10 @@ export function AIChatTab() {
         </button>
       </div>
 
-      {/* ── Status hint (no model / not streaming etc.) ──────────── */}
+      {/* ── Status hint (current source) ────────────────────────── */}
       {chat.aiSource && (
         <p className='text-[10px] text-gray-500'>
-          Connecting to{' '}
+          Connected to{' '}
           <span className='font-medium text-gray-700'>
             {chat.aiSource.kind === 'local'
               ? `This device — ${chat.aiSource.modelName || 'No model'}`
@@ -171,7 +175,12 @@ export function AIChatTab() {
         className='flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto rounded-md border border-gray-200 bg-white p-2'
       >
         {chat.messages.length === 0 && !chat.isStreaming ? (
-          <EmptyState hasModel={ai.isReady} hasSource={!!chat.aiSource} />
+          <EmptyState
+            hasModel={ai.isReady}
+            hasSource={!!chat.aiSource}
+            sourceIsLocal={chat.aiSource?.kind === 'local'}
+            onSwitchToSetup={onSwitchToSetup}
+          />
         ) : (
           <>
             {chat.messages.map((m) => (
@@ -185,17 +194,30 @@ export function AIChatTab() {
         {chat.error && (
           <div
             role='alert'
-            className='flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700'
+            className='flex flex-col gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700'
           >
-            <span className='font-mono uppercase tracking-wide'>{chat.error.code}</span>
-            <span className='flex-1'>{chat.error.message}</span>
-            <button
-              type='button'
-              onClick={() => chat.retry()}
-              className='rounded-md border border-red-300 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300'
-            >
-              Retry
-            </button>
+            <div className='flex items-start gap-2'>
+              <span className='font-mono uppercase tracking-wide'>{chat.error.code}</span>
+              <span className='flex-1'>{chat.error.message}</span>
+            </div>
+            <div className='flex items-center gap-1.5'>
+              {isRelayErrorCode(chat.error.code) && onSwitchToSetup && (
+                <button
+                  type='button'
+                  onClick={onSwitchToSetup}
+                  className='inline-flex items-center gap-1 rounded-md border border-red-300 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300'
+                >
+                  Switch source
+                </button>
+              )}
+              <button
+                type='button'
+                onClick={() => chat.retry()}
+                className='rounded-md border border-red-300 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300'
+              >
+                Retry
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -218,13 +240,7 @@ export function AIChatTab() {
               handleSend()
             }
           }}
-          placeholder={
-            isInputDisabled
-              ? !ai.isReady
-                ? 'Pick a model in Setup to start chatting.'
-                : 'Pick an AI source in Setup.'
-              : 'Type a message…'
-          }
+          placeholder={inputPlaceholder}
           disabled={isInputDisabled}
           rows={2}
           className='h-14 flex-1 resize-none rounded-md border border-gray-200 bg-white p-2 text-xs text-gray-800 focus:border-tamarind-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50'
@@ -467,22 +483,79 @@ function StreamingBubble({ content, thinking }: { content: string; thinking: str
   )
 }
 
-function EmptyState({ hasModel, hasSource }: { hasModel: boolean; hasSource: boolean }) {
+function EmptyState({
+  hasModel,
+  hasSource,
+  sourceIsLocal,
+  onSwitchToSetup
+}: {
+  hasModel: boolean
+  hasSource: boolean
+  sourceIsLocal: boolean
+  onSwitchToSetup?: () => void
+}) {
+  // Three distinct empty states:
+  //   1. No source at all — primary "Switch source" CTA points to
+  //      the Workspace tab. The user must pick either "This device"
+  //      (which requires a loaded model) or a peer with a loaded
+  //      model.
+  //   2. Source is local but no model is loaded — guide the user
+  //      through loading a model (via the AI model picker in the
+  //      footer) AND then picking "This device" in Workspace.
+  //   3. Source is set and a model is loaded — generic "start a
+  //      conversation" prompt.
+  let body: React.ReactNode
+  if (!hasSource) {
+    body = (
+      <>
+        <p className='text-[10px] text-gray-500'>
+          Pick an AI source in Workspace to start chatting.
+        </p>
+        {onSwitchToSetup && (
+          <button
+            type='button'
+            onClick={onSwitchToSetup}
+            className='mt-1 inline-flex items-center gap-1 rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-blue-700 transition hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
+          >
+            Pick a source
+          </button>
+        )}
+      </>
+    )
+  } else if (sourceIsLocal && !hasModel) {
+    body = (
+      <>
+        <p className='text-[10px] text-gray-500'>
+          Your source is &ldquo;This device&rdquo; but no model is loaded.
+        </p>
+        <p className='text-[10px] text-gray-500'>
+          Open the AI model picker (footer) to load a model.
+        </p>
+      </>
+    )
+  } else {
+    body = <p className='text-[10px] text-gray-500'>Start a conversation with your AI.</p>
+  }
+
   return (
     <div className='m-auto flex max-w-[16rem] flex-col items-center gap-2 px-2 py-6 text-center'>
       <div className='rounded-full bg-gray-100 p-2'>
         <FileText className='h-4 w-4 text-gray-500' aria-hidden='true' />
       </div>
       <p className='text-xs font-medium text-gray-700'>No messages yet</p>
-      <p className='text-[10px] text-gray-500'>
-        {!hasModel
-          ? 'Pick a model in Setup to start chatting.'
-          : !hasSource
-            ? 'Pick an AI source in Setup.'
-            : 'Start a conversation with your AI.'}
-      </p>
+      {body}
     </div>
   )
+}
+
+// Codes that mean "the peer source is no longer reachable — pick a
+// new one". A local SEND_FAILED or completion error doesn't qualify:
+// the user might just want to Retry, not switch sources.
+const RELAY_ERROR_CODES = new Set(['MODEL_MISMATCH', 'RELAY_ERROR', 'ROUTE_FAILED', 'NO_SOURCE'])
+
+function isRelayErrorCode(code: string | undefined | null): boolean {
+  if (!code) return false
+  return RELAY_ERROR_CODES.has(code)
 }
 
 // Minimal markdown component map. No syntax highlighting, no math, no

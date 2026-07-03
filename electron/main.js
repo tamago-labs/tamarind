@@ -8,7 +8,9 @@ const {
   cancelCurrentRequest,
   unloadCurrent,
   getActiveModelId,
+  getActiveEntry,
   getLocalAiStateSnapshot,
+  setStreamingNow,
   mapError,
   buildStatus,
   resetCache
@@ -19,6 +21,8 @@ const sessions = require('./sessions')
 const path = require('path')
 const PearRuntime = require('pear-runtime')
 const FramedStream = require('framed-stream')
+const b4a = require('b4a')
+const z32 = require('z32')
 
 // Smoke-test harness opt-in. Electron's CLI parser rejects these as
 // unknown switches (the port flag interferes with --inspect; modern
@@ -178,6 +182,10 @@ function getWorker(specifier) {
             // Don't forward the raw `relay-event` to the renderer;
             // re-emit on the dedicated `ai:chat:relay-event` channel
             // that the renderer's `bridge.onRelayEvent` subscribes to.
+            console.log(
+              '[main] relay: relay-event from worker',
+              JSON.stringify({ requestId: frame.requestId, kind: frame.kind }).slice(0, 200)
+            )
             sendToAll('ai:chat:relay-event', {
               requestId: frame.requestId,
               kind: frame.kind,
@@ -497,9 +505,7 @@ function registerChatIpc() {
       }
     }
   })
-  ipcMain.handle('sessions:save', (_evt, slug, messages) =>
-    sessions.saveMessages(slug, messages)
-  )
+  ipcMain.handle('sessions:save', (_evt, slug, messages) => sessions.saveMessages(slug, messages))
 
   // Phase 7: peer AI states for the Setup tab's "Chat with this
   // peer" picker. The worker pushes a fresh `ai-states` frame on
@@ -521,7 +527,16 @@ function registerChatIpc() {
 // snapshot so the row exists from the first frame).
 function pushAiStateToRoomWorker() {
   const pipe = workers.get(roomWorkerSpecifier)?.pipe
-  if (!pipe) return
+  if (!pipe) {
+    // The room worker is started lazily by the renderer's `useRoom`
+    // (via `bridge.startWorker`). The 250ms-timed seed in
+    // `app.whenReady` can fire before the renderer mounts, dropping
+    // the very first push — but `models:select` only runs after the
+    // user picks a model in the UI, by which point the worker is up.
+    // Logged at warn so a regression is visible in the dev console.
+    console.warn('[main] pushAiStateToRoomWorker: room worker pipe not ready, push dropped')
+    return
+  }
   const snapshot = getLocalAiStateSnapshot()
   try {
     pipe.write(JSON.stringify({ type: 'ai-state-snapshot', snapshot }))
@@ -536,6 +551,23 @@ function pushAiStateToRoomWorker() {
 // owns a 50ms token coalescer + a list of buffered text so we don't
 // flood the Autobase with one append per token.
 const relayHandlers = new Map()
+
+// The worker pipe uses **hex** strings for writer keys (the worker's
+// `appendRelayRequest` / `appendRelayResponse` / `appendRelayCancel`
+// all do `b4a.from(key, 'hex')` before encoding the dispatch). But
+// writer keys arrive in main.js in **z32** format — the worker's
+// `me` frame emits z32, and the renderer's `peerAiStates` writer
+// keys are z32. Convert at the boundary so the worker never sees a
+// mismatched encoding. Passing a z32 string into `b4a.from(_, 'hex')`
+// throws "Invalid input" (this is the bug the user hit).
+function z32ToHex(z32Key) {
+  if (typeof z32Key !== 'string' || z32Key.length === 0) return null
+  try {
+    return b4a.toString(z32.decode(z32Key), 'hex')
+  } catch {
+    return null
+  }
+}
 
 // 50ms coalescing window — locked-in decision 1.
 const RELAY_COALESCE_MS = 50
@@ -555,15 +587,31 @@ function routeChatCompletion({ requestId, targetWriterKey, messages, modelId }) 
   }
   const pipe = workers.get(roomWorkerSpecifier)?.pipe
   if (!pipe) return { success: false, error: 'Worker not running' }
-  const myKey = getLocalWriterKey()
-  if (!myKey) return { success: false, error: 'Local writer key not ready' }
+  const myKeyZ32 = getLocalWriterKey()
+  if (!myKeyZ32) return { success: false, error: 'Local writer key not ready' }
+  // Convert z32 → hex for the worker pipe (see z32ToHex comment).
+  const myKey = z32ToHex(myKeyZ32)
+  const toKey = z32ToHex(targetWriterKey)
+  if (!myKey || !toKey) {
+    return { success: false, error: 'Writer key encoding failed' }
+  }
+  console.log(
+    '[main] relay: routeChatCompletion',
+    JSON.stringify({
+      requestId,
+      fromKey: myKey.slice(0, 8),
+      toKey: toKey.slice(0, 8),
+      modelId,
+      messageCount: messages.length
+    }).slice(0, 200)
+  )
   try {
     pipe.write(
       JSON.stringify({
         type: 'relay-request',
         requestId,
         fromKey: myKey,
-        toKey: targetWriterKey,
+        toKey,
         messages,
         modelId,
         createdAt: Date.now()
@@ -582,19 +630,22 @@ function cancelRouteChat(requestId) {
   if (typeof requestId !== 'string') return { success: false, error: 'requestId required' }
   const pipe = workers.get(roomWorkerSpecifier)?.pipe
   if (!pipe) return { success: false }
-  const myKey = getLocalWriterKey()
-  if (!myKey) return { success: false }
+  const myKeyZ32 = getLocalWriterKey()
+  if (!myKeyZ32) return { success: false }
+  // Convert z32 → hex for the worker pipe (see z32ToHex comment).
+  const myKey = z32ToHex(myKeyZ32)
+  if (!myKey) return { success: false, error: 'Writer key encoding failed' }
   // The worker's relay-cancel route needs to know which peer to send
-  // to, so we look up the in-flight handler for the fromKey.
+  // to, so we look up the in-flight handler for the toKey.
   const handler = relayHandlers.get(requestId)
-  const toKey = handler?.toKey
+  const toKey = handler?.toKey ? z32ToHex(handler.toKey) : null
   try {
     pipe.write(
       JSON.stringify({
         type: 'relay-cancel',
         requestId,
         fromKey: myKey,
-        toKey: toKey ?? null
+        toKey
       })
     )
   } catch {
@@ -607,8 +658,18 @@ function cancelRouteChat(requestId) {
 // local completion and streams the events back as `relay-response`
 // frames (one per kind with 50ms coalescing for token text).
 async function handleRelayRun({ requestId, fromKey, messages, modelId }) {
+  console.log(
+    '[main] relay: handleRelayRun',
+    JSON.stringify({
+      requestId,
+      fromKey: (fromKey || '').slice(0, 8),
+      modelId,
+      messageCount: (messages || []).length
+    }).slice(0, 200)
+  )
   if (relayHandlers.has(requestId)) {
     // Duplicate — drop. Single-flight per requestId.
+    console.log('[main] relay: handleRelayRun duplicate, dropping')
     return
   }
   const entry = {
@@ -622,6 +683,20 @@ async function handleRelayRun({ requestId, fromKey, messages, modelId }) {
   }
   relayHandlers.set(requestId, entry)
 
+  // Convert the z32 writer keys to hex for the worker pipe (see
+  // z32ToHex comment). The host stores them in z32 (canonical form)
+  // for chat-attribution parity; the worker only deals in hex.
+  entry.fromKeyHex = z32ToHex(entry.fromKey)
+  entry.toKeyHex = z32ToHex(entry.toKey)
+  if (!entry.fromKeyHex || !entry.toKeyHex) {
+    sendImmediate('error', {
+      error: { code: 'BAD_KEY', message: 'Writer key encoding failed', retryable: false }
+    })
+    sendImmediate('done')
+    close()
+    return
+  }
+
   function flushBuffered() {
     if (entry.closed) return
     if (entry.pendingText == null && entry.pendingKind == null) return
@@ -632,8 +707,8 @@ async function handleRelayRun({ requestId, fromKey, messages, modelId }) {
         JSON.stringify({
           type: 'relay-response',
           requestId: entry.requestId,
-          fromKey: entry.toKey,
-          toKey: entry.fromKey,
+          fromKey: entry.toKeyHex,
+          toKey: entry.fromKeyHex,
           kind: entry.pendingKind,
           ...(entry.pendingText != null ? { text: entry.pendingText } : {})
         })
@@ -663,8 +738,8 @@ async function handleRelayRun({ requestId, fromKey, messages, modelId }) {
         JSON.stringify({
           type: 'relay-response',
           requestId: entry.requestId,
-          fromKey: entry.toKey,
-          toKey: entry.fromKey,
+          fromKey: entry.toKeyHex,
+          toKey: entry.fromKeyHex,
           kind,
           ...(extra || {})
         })
@@ -692,14 +767,29 @@ async function handleRelayRun({ requestId, fromKey, messages, modelId }) {
   // completion call but writes to our buffer/sendImmediate/close.
   try {
     const { completion } = require('@qvac/sdk')
+    // The requester's `modelId` is the modelStore entry id (propagated
+    // through `peerAiStates`), so compare against the same id locally.
+    // The SDK uses its own internal `currentModelId` (`modelIdLive`),
+    // which is a different identifier and must not be compared here.
+    const entryIdLive = getActiveEntry()?.id ?? null
     const modelIdLive = getActiveModelId()
-    if (!modelIdLive || modelIdLive !== modelId) {
-      sendImmediate('error', { error: { code: 'MODEL_MISMATCH', message: 'Model not loaded here', retryable: false } })
+    console.log(
+      '[main] relay: handleRelayRun model check',
+      JSON.stringify({ modelId, entryIdLive, modelIdLive, match: entryIdLive === modelId }).slice(
+        0,
+        200
+      )
+    )
+    if (!modelIdLive || !entryIdLive || entryIdLive !== modelId) {
+      sendImmediate('error', {
+        error: { code: 'MODEL_MISMATCH', message: 'Model not loaded here', retryable: false }
+      })
       sendImmediate('done')
       close()
       return
     }
     if (!getLocalAiStateSnapshot().accepting) {
+      console.log('[main] relay: handleRelayRun busy')
       sendImmediate('busy')
       sendImmediate('done')
       close()
@@ -726,7 +816,9 @@ async function handleRelayRun({ requestId, fromKey, messages, modelId }) {
       } else if (event.type === 'completionDone') {
         flushBuffered()
         if (event.stopReason === 'error' && event.error) {
-          sendImmediate('error', { error: { code: 'COMPLETION_ERROR', message: event.error.message, retryable: true } })
+          sendImmediate('error', {
+            error: { code: 'COMPLETION_ERROR', message: event.error.message, retryable: true }
+          })
         }
         sendImmediate('done', { stopReason: event.stopReason ?? 'eos' })
         break
@@ -757,7 +849,9 @@ function handleRelayCancel({ requestId }) {
   // is a coarse cancel — the owner's next drive loop iteration will
   // see `entry.closed` and break out.
   try {
-    require('@qvac/sdk').cancel({}).catch(() => {})
+    require('@qvac/sdk')
+      .cancel({})
+      .catch(() => {})
   } catch {
     // ignore
   }

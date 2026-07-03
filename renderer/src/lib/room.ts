@@ -27,6 +27,16 @@ export type RoomEvent =
   | { type: 'chat'; messages: BoardScopedChatMessage[] }
   | { type: 'peers'; count: number }
   | { type: 'me'; key: string; name: string }
+  | {
+      type: 'ai-states'
+      states: Array<{
+        writerKey: string
+        modelId: string | null
+        modelName: string | null
+        loadedAt: number | null
+        accepting: boolean
+      }>
+    }
 
 export interface SnapshotState {
   boards: BoardSnapshot[]

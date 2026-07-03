@@ -77,22 +77,45 @@ class TamarindRoomWorkerTask extends ReadyResource {
     })
 
     this.room = new TamarindRoom(this.store, this.swarm, this._initialInvite)
+    // Alias for the local writer's keypair. The actual instance
+    // lives on the room (`this.room.localBase`); aliasing here so
+    // `this.localBase.key` works the same in the entry file as it
+    // does in `tamarind-room.js` itself. The original identity
+    // design stored a separate keypair on the task, so this alias
+    // didn't exist — the new design uses the Corestore's writer
+    // key everywhere.
+    this.localBase = this.room.localBase
     this.debounceBroadcast = debounce(() => this._broadcast())
     this.room.on('update', () => this.debounceBroadcast())
   }
 
   async _open() {
     await this.store.ready()
-    await this._loadIdentity()
+    // _loadIdentity reads `this.localBase.key` (via `localBase.key`),
+    // which is only available after the room is open. The
+    // constructor sets `localBase` synchronously but the key is
+    // populated during `room.ready()`. The previous identity
+    // design generated a fresh `HypercoreCrypto.keyPair()` here
+    // so it didn't need the localBase, but the new design (where
+    // the identity is just a display name and the key is
+    // `localBase.key` everywhere) requires the room to be ready
+    // first.
     await this.room.ready()
+    await this._loadIdentity()
 
     // Tell the renderer about the writer's stable pubkey + display
     // name. Used by GroupChatPanel to label "You" for messages from
-    // this writer.
+    // this writer. The key MUST be `this.localBase.key` (not
+    // `this.identity.key`) so the renderer's `me.key` matches the
+    // writer key broadcast in `peerAiStates` (which is keyed by
+    // `localBase.key` in `appendAiState`). The two are independent
+    // random keys — using `identity.key` here silently breaks the
+    // Setup tab's local-writer filter and the relay-routing match
+    // in `onRelayRequest` (request toKey comes from peerAiStates).
     this.pipe.write(
       JSON.stringify({
         type: 'me',
-        key: z32.encode(this.identity.key),
+        key: z32.encode(this.localBase.key),
         name: this.identity.name
       })
     )
@@ -145,12 +168,40 @@ class TamarindRoomWorkerTask extends ReadyResource {
         return
       }
       if (message && message.type === 'relay-request') {
+        console.log(
+          '[tamarind-room] relay: appendRelayRequest',
+          JSON.stringify({
+            requestId: message.requestId,
+            toKey: (message.toKey || '').slice(0, 8)
+          }).slice(0, 200)
+        )
         this.room
           .appendRelayRequest(message)
           .catch((err) => console.error('[tamarind-room] appendRelayRequest failed:', err))
         return
       }
+      if (message && message.type === 'relay-response') {
+        // The host (or whoever is running the completion) sends a
+        // `relay-response` pipe frame per token / kind / done. We
+        // append it to the Autobase as a `@tamarind/relay-response`
+        // dispatch so the requester can read it back via the
+        // `onRelayResponse` route handler. Without this handler the
+        // host's response stream is silently dropped — the requester
+        // never sees any tokens.
+        console.log(
+          '[tamarind-room] relay: appendRelayResponse',
+          JSON.stringify({ requestId: message.requestId, kind: message.kind }).slice(0, 200)
+        )
+        this.room
+          .appendRelayResponse(message)
+          .catch((err) => console.error('[tamarind-room] appendRelayResponse failed:', err))
+        return
+      }
       if (message && message.type === 'relay-cancel') {
+        console.log(
+          '[tamarind-room] relay: appendRelayCancel',
+          JSON.stringify({ requestId: message.requestId }).slice(0, 200)
+        )
         this.room
           .appendRelayCancel(message)
           .catch((err) => console.error('[tamarind-room] appendRelayCancel failed:', err))
@@ -167,17 +218,43 @@ class TamarindRoomWorkerTask extends ReadyResource {
     // local completion. When a `relay-response` from a peer arrives,
     // forward to main so it can push to the renderer's
     // `ai:chat:relay-event` channel.
+    //
+    // The dispatch decoder returns **Buffer** for `buffer`-typed
+    // fields (see `spec/dispatch/messages.js` `c.buffer.decode`).
+    // The local identity key is a Buffer too. We compare buffers
+    // directly — DON'T compare to `z32.encode(...)` because that
+    // would compare a Buffer to a string, which is always false and
+    // would silently drop every relay request.
     this.room.onRelayRequest = (data) => {
-      const myKey = z32.encode(this.identity.key)
-      if (data.toKey !== myKey) return
-      // data.toKey is z32; data.fromKey is the same. Convert fromKey
-      // back to hex for the local relay-run write — main keeps the
-      // canonical writer-key in z32 too.
+      // Compare against `localBase.key` so it matches the writer
+      // key broadcast in `peerAiStates` (which is `localBase.key`).
+      // See the `me` event comment above.
+      const myKey = this.localBase.key
+      if (!b4a.equals(data.toKey, myKey)) {
+        console.log(
+          '[tamarind-room] relay: onRelayRequest not for me',
+          JSON.stringify({
+            requestId: data.requestId,
+            myKey: z32.encode(myKey).slice(0, 8),
+            toKey: z32.encode(data.toKey).slice(0, 8)
+          }).slice(0, 200)
+        )
+        return
+      }
+      console.log(
+        '[tamarind-room] relay: onRelayRequest matched',
+        JSON.stringify({
+          requestId: data.requestId,
+          fromKey: z32.encode(data.fromKey).slice(0, 8)
+        }).slice(0, 200)
+      )
       this.pipe.write(
         JSON.stringify({
           type: 'relay-run',
           requestId: data.requestId,
-          fromKey: data.fromKey,
+          // Send the fromKey as z32 — main keeps the canonical
+          // writer-key in z32 form for chat-attribution parity.
+          fromKey: z32.encode(data.fromKey),
           messages: data.messages,
           modelId: data.modelId
         })
@@ -185,6 +262,10 @@ class TamarindRoomWorkerTask extends ReadyResource {
     }
     this.room.onRelayResponse = (data) => {
       // I'm the requester. Push the event to the renderer via main.
+      console.log(
+        '[tamarind-room] relay: onRelayResponse (I am requester)',
+        JSON.stringify({ requestId: data.requestId, kind: data.kind }).slice(0, 200)
+      )
       this.pipe.write(
         JSON.stringify({
           type: 'relay-event',
@@ -196,8 +277,23 @@ class TamarindRoomWorkerTask extends ReadyResource {
       )
     }
     this.room.onRelayCancel = (data) => {
-      const myKey = z32.encode(this.identity.key)
-      if (data.toKey !== myKey) return
+      // Compare against `localBase.key` — see `onRelayRequest`.
+      const myKey = this.localBase.key
+      if (!b4a.equals(data.toKey, myKey)) {
+        console.log(
+          '[tamarind-room] relay: onRelayCancel not for me',
+          JSON.stringify({
+            requestId: data.requestId,
+            myKey: z32.encode(myKey).slice(0, 8),
+            toKey: z32.encode(data.toKey).slice(0, 8)
+          }).slice(0, 200)
+        )
+        return
+      }
+      console.log(
+        '[tamarind-room] relay: onRelayCancel matched',
+        JSON.stringify({ requestId: data.requestId }).slice(0, 200)
+      )
       this.pipe.write(JSON.stringify({ type: 'relay-cancel', requestId: data.requestId }))
     }
 
@@ -218,7 +314,11 @@ class TamarindRoomWorkerTask extends ReadyResource {
       case 'send-chat':
         await this.room.addMessage(message.text, {
           name: this.identity.name,
-          key: z32.encode(this.identity.key),
+          // Use `localBase.key` so the chat's `info.key` matches the
+          // local writer's `me.key` (also `localBase.key` now). The
+          // previous `this.identity.key` was a separate random
+          // keypair that no longer aligned.
+          key: z32.encode(this.localBase.key),
           at: Date.now()
         })
         return
@@ -249,7 +349,7 @@ class TamarindRoomWorkerTask extends ReadyResource {
         this.pipe.write(
           JSON.stringify({
             type: 'me',
-            key: z32.encode(this.identity.key),
+            key: z32.encode(this.localBase.key),
             name: this.identity.name
           })
         )
@@ -364,13 +464,20 @@ class TamarindRoomWorkerTask extends ReadyResource {
     this.pipe.write(JSON.stringify({ type: 'peers', count: this.peers }))
   }
 
-  // Generate a fresh Hyperswarm keypair on first launch and stash the
-  // writer pubkey + display name in <userData>/identity.json. The
-  // renderer reads this back so the splash can pre-fill the name
-  // modal. Subsequent launches reuse the same key so the same writer
-  // always shows the same "You" key in chat attribution.
+  // Load the display name from <userData>/identity.json if it
+  // exists, otherwise pick a default based on the local writer's
+  // key suffix. The writer key is **not** persisted here — it's
+  // `this.localBase.key` everywhere. The previous design stored a
+  // separate `HypercoreCrypto.keyPair()` in this file, but the
+  // Corestore's localBase already provides a keypair; persisting a
+  // second one caused the relay-routing identity check to diverge
+  // from the ai-state's writerKey (they were two independent
+  // random keys), which silently dropped every relay request.
   async _loadIdentity() {
     if (writerOverride) {
+      // `--writer <hex>` still wins. The identity here is treated
+      // as a display-only name; the actual writer key for routing
+      // is `this.localBase.key` (set up via Corestore).
       const key = Buffer.from(writerOverride, 'hex')
       if (key.length !== 32) throw new Error('writer override must be 32-byte hex')
       this.identity = { key, name: this._requestedName || `User-${key.toString('hex').slice(-4)}` }
@@ -383,25 +490,29 @@ class TamarindRoomWorkerTask extends ReadyResource {
     } catch {
       existing = null
     }
-    if (existing && Buffer.isBuffer(existing.key)) {
-      this.identity = {
-        key: existing.key,
-        name:
-          this._requestedName || existing.name || `User-${existing.key.toString('hex').slice(-4)}`
-      }
-    } else {
-      const { publicKey } = HypercoreCrypto.keyPair()
-      this.identity = {
-        key: publicKey,
-        name: this._requestedName || `User-${publicKey.toString('hex').slice(-4)}`
-      }
+    const persistedName = existing && typeof existing.name === 'string' ? existing.name : null
+    const defaultSuffix = this.localBase.key.toString('hex').slice(-4)
+    this.identity = {
+      key: this.localBase.key,
+      name: this._requestedName || persistedName || `User-${defaultSuffix}`
+    }
+    // Persist the display name on first boot so the same name
+    // shows up across launches. The key is `this.localBase.key`
+    // (not stored) — it's regenerated by Corestore if storage is
+    // wiped, so storing it would be stale on the next boot
+    // anyway.
+    if (!persistedName) {
       await this._persistIdentity()
     }
   }
 
   async _persistIdentity() {
+    // Only persist the display name — the writer key is
+    // `this.localBase.key`, regenerated by Corestore if storage is
+    // wiped. Storing the key would just leave a stale field in the
+    // JSON for a future bug to read.
     const tmp = identityPath + '.tmp'
-    await fs.promises.writeFile(tmp, JSON.stringify(this.identity))
+    await fs.promises.writeFile(tmp, JSON.stringify({ name: this.identity.name }))
     await fs.promises.rename(tmp, identityPath)
   }
 }

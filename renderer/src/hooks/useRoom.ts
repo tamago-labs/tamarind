@@ -14,7 +14,7 @@
 
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { bridge, ROOM_WORKER } from '../lib/bridge'
-import { onRoomEvent, writeRoom, type SnapshotState } from '../lib/room'
+import { onRoomEvent, writeRoom, type RoomEvent, type SnapshotState } from '../lib/room'
 import type { Action } from '../canvas/canvasReducer'
 import type { ChatMessage } from '../lib/chat'
 
@@ -63,17 +63,10 @@ const initialState: RoomState = {
   error: null
 }
 
-// Room-event union (subset of `room.ts.RoomEvent`). Inlined here so
-// this module is the sole owner of the store's mutation surface.
-type RoomEvent =
-  | { type: 'status'; phase: 'starting' | 'ready' | 'error'; error?: string }
-  | { type: 'role'; role: 'host' | 'guest'; writable: boolean }
-  | { type: 'invite'; invite: string }
-  | { type: 'snapshot'; state: SnapshotState }
-  | { type: 'chat'; messages: ChatMessage[] }
-  | { type: 'peers'; count: number }
-  | { type: 'me'; key: string; name: string }
-  | { type: 'ai-states'; states: PeerAiState[] }
+// Room-event union. The canonical definition lives in `lib/room.ts`;
+// imported here so the `apply()` switch and the listener callback
+// share the same surface (no more `as RoomEvent` casts at the
+// subscription seam).
 
 // Module-level singleton. `version` is what `useSyncExternalStore`
 // reads as the snapshot — bumping it is how we tell React "the store
@@ -125,7 +118,9 @@ function apply(event: RoomEvent) {
 function reset() {
   // The worker either crashed or was intentionally restarted (host →
   // guest swap). Wipe stale state so the new worker's first
-  // `status:starting` event lands on a clean slate.
+  // `status:starting` event lands on a clean slate. Stop polling
+  // too — the new worker's `ensureStarted` will re-arm it.
+  stopPeerAiPolling()
   Object.assign(store, initialState)
   bumpAndEmit()
 }
@@ -136,12 +131,15 @@ function ensureStarted(): Promise<boolean> {
     .startWorker(ROOM_WORKER)
     .then(() => {
       if (!unsubscribe) {
-        unsubscribe = onRoomEvent((event) => apply(event as RoomEvent))
+        unsubscribe = onRoomEvent((event) => apply(event))
         // `pear:joinWithInvite` kills + respawns the room worker in
         // main.js; the renderer needs to forget everything from the
         // previous boot before the new worker's events arrive.
         bridge.onWorkerExit(ROOM_WORKER, () => reset())
       }
+      // Slow-replication safety net: pull peer AI states every 5s in
+      // case the worker-side `ai-states` broadcast hasn't fired yet.
+      startPeerAiPolling()
       return true
     })
     .catch((err: unknown) => {
@@ -150,6 +148,48 @@ function ensureStarted(): Promise<boolean> {
       throw err
     })
   return startPromise
+}
+
+// Pull the latest peer AI states from main. The worker pushes an
+// `ai-states` frame on every Autobase update, but a renderer that
+// mounts after the latest broadcast would otherwise wait for the
+// next update to learn about existing peers — which on a quiet
+// room can be indefinitely long. The main process caches the last
+// frame in `lastPeerAiStates` and serves it via `aiSourcePeers:list`
+// (electron/main.js:508) for exactly this case.
+async function hydratePeerAiStates() {
+  try {
+    const states = await bridge.aiSourcePeers()
+    if (Array.isArray(states)) {
+      store.peerAiStates = states
+      bumpAndEmit()
+    }
+  } catch (err) {
+    console.error('[useRoom] aiSourcePeers pull failed:', err)
+  }
+}
+
+// How often to poll `bridge.aiSourcePeers()` as a safety net for
+// slow Hyperswarm replication on Windows. The Autobase `update`
+// event already drives a worker-side broadcast that updates the
+// cache, so this is purely a fallback for the gap between "guest
+// joined" and "Autobase replicated the host's ai-state row".
+const PEER_AI_POLL_MS = 5000
+
+let pollHandle: ReturnType<typeof setInterval> | null = null
+
+function startPeerAiPolling() {
+  if (pollHandle) return
+  pollHandle = setInterval(() => {
+    void hydratePeerAiStates()
+  }, PEER_AI_POLL_MS)
+}
+
+function stopPeerAiPolling() {
+  if (pollHandle) {
+    clearInterval(pollHandle)
+    pollHandle = null
+  }
 }
 
 const subscribe = (cb: () => void) => {
@@ -195,7 +235,10 @@ export function useRoom(): RoomState & {
       // Replay any events that arrived between worker boot and
       // listener attachment. apply() was already called for those by
       // the (already-attached) onRoomEvent listener above; we just
-      // need to make sure subsequent events fire.
+      // need to make sure subsequent events fire. Then pull the
+      // cached `peerAiStates` snapshot from main so the Setup tab's
+      // peer picker isn't empty on a quiet room.
+      void hydratePeerAiStates()
     })
     return () => {
       cancelled = true

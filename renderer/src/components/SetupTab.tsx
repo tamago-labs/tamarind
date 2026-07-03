@@ -1,21 +1,23 @@
 // Workspace tab — the right-drawer's "more stuff" tab. Renamed
 // from "Setup" because it covers more than just configuration:
-// it owns the invite code, the peer list, and the AI source
-// picker. Three sections, top to bottom:
+// it owns the invite code, the peer count, and the AI source
+// picker. Two sections, top to bottom:
 //
 //   1. Invite code — host's z32 invite + copy button
-//   2. Pick a model — picker showing the local model + every
-//      peer's loaded model. Each peer row has a "Chat with this
-//      peer" button that sets the AI source and switches the
-//      drawer to the AI chat tab. Disabled when the peer is not
-//      loaded or not currently accepting requests.
-//   3. Peers — the connected peer count + role badge
+//   2. Pick a source — exactly two options: "Local" (this
+//      device's model) and "Host" (the host peer's model).
+//      Clicking a row sets the AI source and switches to the
+//      AI chat tab. The user can also clear the source if they
+//      want to switch off (Option 3 — no auto-fallback).
 //
-// The drawer passes `onSwitchToChat` so this tab can hand control
-// back to the chat tab after the user picks a peer source.
+// The "Host" option is the host peer's model, identified as the
+// first non-local writer in `peerAiStates`. `useRoom` polls
+// `bridge.aiSourcePeers()` every 5s (peerAiPolling) so the
+// picker doesn't sit on an empty list while Hyperswarm replicates.
+// A "Re-checking…" hint surfaces during the wait.
 
 import { useEffect, useState } from 'react'
-import { Check, Copy, MessageSquare, Users } from 'lucide-react'
+import { Check, Copy, X } from 'lucide-react'
 import { useAI } from '../hooks/useAI'
 import { useAIChat } from '../hooks/useAIChat'
 import { useRoom } from '../hooks/useRoom'
@@ -55,24 +57,32 @@ export function SetupTab({ onSwitchToChat }: SetupTabProps) {
       modelId: ai.activeModel.id,
       modelName: ai.activeModel.name
     })
+    onSwitchToChat?.()
   }
 
-  function selectPeer(writerKey: string, modelId: string, modelName: string) {
+  function selectHost() {
+    if (!hostState) return
     chat.setAiSource({
       kind: 'peer',
-      writerKey,
-      modelId,
-      modelName
+      writerKey: hostState.writerKey,
+      modelId: hostState.modelId ?? '',
+      modelName: hostState.modelName ?? 'Host model'
     })
     onSwitchToChat?.()
   }
 
-  // Filter peer AI states — skip the local writer (the local row is
-  // rendered separately as "This device"). Local writer's z32 key is
-  // `room.me?.key`; we compare against the same encoding the worker
-  // pushed in `ai-states`.
+  function clearSource() {
+    chat.setAiSource(null)
+  }
+
+  // Host = first non-local writer in `peerAiStates`. In the current
+  // single-host topology, this is always the host. The renderer's
+  // `useRoom` polls the cached snapshot every 5s, so the host row
+  // appears as soon as Hyperswarm replication completes.
   const localKey = room.me?.key
-  const peerAiStates = room.peerAiStates.filter((s) => s.writerKey !== localKey)
+  const hostState = room.peerAiStates.find((s) => s.writerKey !== localKey) ?? null
+  const hostHasModel = !!(hostState?.modelId && hostState?.modelName)
+  const hostVisible = hostState !== null
 
   return (
     <div className='flex flex-col gap-4'>
@@ -118,15 +128,35 @@ export function SetupTab({ onSwitchToChat }: SetupTabProps) {
         </p>
       </section>
 
-      {/* ── Pick a model ────────────────────────────────────────── */}
+      {/* ── Pick a source ───────────────────────────────────────── */}
       <section>
-        <h3 className='mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500'>
-          Pick a model
-        </h3>
+        <div className='mb-2 flex items-center justify-between'>
+          <h3 className='text-xs font-semibold uppercase tracking-wide text-gray-500'>
+            Pick a source
+          </h3>
+          {chat.aiSource && (
+            <button
+              type='button'
+              onClick={clearSource}
+              title='Clear the current source'
+              className='inline-flex items-center gap-1 rounded text-[10px] font-semibold uppercase tracking-wide text-gray-500 transition hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-blue-500'
+            >
+              <X className='h-3 w-3' aria-hidden='true' />
+              Clear
+            </button>
+          )}
+        </div>
+        <p className='mb-2 text-[10px] text-gray-500'>
+          Pick where AI chat should run. &ldquo;Local&rdquo; uses a model loaded on this device;
+          &ldquo;Host&rdquo; routes every message to the host&rsquo;s model over the room. No
+          automatic fallback — if the host is unreachable, the source clears and you have to pick
+          again.
+        </p>
         <div className='flex flex-col gap-1.5'>
           <SourceRow
             kind='local'
-            label='This device'
+            label='Local'
+            subtitle='This device'
             modelName={ai.activeModel?.name ?? null}
             selected={
               chat.aiSource?.kind === 'local' && chat.aiSource.modelId === ai.activeModel?.id
@@ -135,45 +165,26 @@ export function SetupTab({ onSwitchToChat }: SetupTabProps) {
             disabled={!ai.activeModel}
             disabledReason={!ai.activeModel ? 'No model loaded' : undefined}
           />
-          {peerAiStates.length === 0 ? (
-            <p className='px-1 py-1 text-[10px] italic text-gray-400'>No peers in the room yet.</p>
-          ) : (
-            peerAiStates.map((p) => {
-              const loaded = p.modelId && p.modelName
-              return (
-                <SourceRow
-                  key={p.writerKey}
-                  kind='peer'
-                  label={shortWriterKey(p.writerKey)}
-                  modelName={p.modelName}
-                  selected={
-                    chat.aiSource?.kind === 'peer' && chat.aiSource.writerKey === p.writerKey
-                  }
-                  onSelect={() => loaded && selectPeer(p.writerKey, p.modelId!, p.modelName!)}
-                  disabled={!loaded || !p.accepting}
-                  disabledReason={
-                    !loaded
-                      ? 'No model loaded on this peer'
-                      : !p.accepting
-                        ? 'Peer is busy'
-                        : undefined
-                  }
-                />
-              )
-            })
-          )}
-        </div>
-      </section>
-
-      {/* ── Peers ────────────────────────────────────────────────── */}
-      <section>
-        <h3 className='mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500'>Peers</h3>
-        <div className='flex items-center gap-1.5 text-xs text-gray-700'>
-          <Users className='h-3.5 w-3.5 text-gray-500' aria-hidden='true' />
-          <span>
-            {room.peers} {room.peers === 1 ? 'peer' : 'peers'} connected
-            {room.role ? ` \u00b7 ${room.role === 'host' ? 'You host' : 'You joined'}` : ''}
-          </span>
+          <SourceRow
+            kind='host'
+            label='Host'
+            subtitle={hostState ? shortWriterKey(hostState.writerKey) : 'Waiting for host…'}
+            modelName={hostHasModel ? (hostState?.modelName ?? null) : null}
+            selected={
+              chat.aiSource?.kind === 'peer' && chat.aiSource.writerKey === hostState?.writerKey
+            }
+            onSelect={selectHost}
+            disabled={!hostHasModel}
+            disabledReason={
+              !hostVisible
+                ? 'Re-checking…'
+                : !hostHasModel
+                  ? 'Host has no model loaded'
+                  : !hostState?.accepting
+                    ? 'Host is busy'
+                    : undefined
+            }
+          />
         </div>
       </section>
 
@@ -190,21 +201,23 @@ export function SetupTab({ onSwitchToChat }: SetupTabProps) {
 }
 
 function shortWriterKey(key: string) {
-  if (typeof key !== 'string' || key.length < 6) return 'peer'
-  return `peer-${key.slice(0, 6)}`
+  if (typeof key !== 'string' || key.length < 6) return 'host'
+  return `host-${key.slice(0, 6)}`
 }
 
 function SourceRow({
   kind,
   label,
+  subtitle,
   modelName,
   selected,
   onSelect,
   disabled,
   disabledReason
 }: {
-  kind: 'local' | 'peer'
+  kind: 'local' | 'host'
   label: string
+  subtitle: string
   modelName: string | null
   selected: boolean
   onSelect: () => void
@@ -216,15 +229,27 @@ function SourceRow({
       type='button'
       onClick={onSelect}
       disabled={disabled}
+      aria-pressed={selected}
       className={
         selected
           ? 'flex w-full items-center gap-2 rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-left transition focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60'
           : 'flex w-full items-center gap-2 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-left transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60'
       }
     >
+      <div
+        aria-hidden='true'
+        className={
+          selected
+            ? 'inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-2 border-blue-500 bg-blue-500'
+            : 'inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-2 border-gray-300 bg-white'
+        }
+      >
+        {selected && <span className='h-1.5 w-1.5 rounded-full bg-white' />}
+      </div>
       <div className='min-w-0 flex-1'>
         <div className='flex items-center gap-1.5 text-xs'>
           <span className='truncate font-medium text-gray-800'>{label}</span>
+          <span className='truncate text-[10px] font-normal text-gray-500'>{subtitle}</span>
           {selected && (
             <span className='rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700'>
               Active
@@ -232,16 +257,10 @@ function SourceRow({
           )}
         </div>
         <p className='mt-0.5 truncate text-[10px] text-gray-500'>
-          {modelName ?? (kind === 'local' ? 'No model loaded' : 'No model loaded on this peer')}
+          {modelName ?? (kind === 'local' ? 'No model loaded' : 'No model loaded on host')}
           {disabled && disabledReason ? ` · ${disabledReason}` : ''}
         </p>
       </div>
-      {kind === 'peer' && (
-        <span className='inline-flex shrink-0 items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-600'>
-          <MessageSquare className='h-3 w-3' aria-hidden='true' />
-          Chat
-        </span>
-      )}
     </button>
   )
 }

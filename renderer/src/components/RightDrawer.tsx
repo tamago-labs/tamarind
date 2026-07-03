@@ -17,8 +17,10 @@
 //     scrolling. The Workspace tab is short and auto-sizes.
 //
 // Tab state lives here so the Workspace tab's "Chat with this peer"
-// button can hand control back to the AI chat tab via
-// `setActive('ai')`.
+// button can hand control to the AI chat tab, and the AI chat tab
+// can hand control back to Workspace when the user needs to (re)pick
+// an AI source. Option 3 — explicit choice, no fallback — requires
+// both directions.
 
 import { useState } from 'react'
 import { AIChatTab } from './AIChatTab'
@@ -32,8 +34,12 @@ export function RightDrawer() {
   const room = useRoom()
   const [active, setActive] = useState<RightTab>('workspace')
   // The "Chat with this peer" button on Workspace calls this to hand
-  // control back to the AI chat tab.
+  // control to the AI chat tab after the user picks a source.
   const switchToAiChat = () => setActive('ai')
+  // The AI chat tab calls this when the user needs to (re)pick a
+  // source — the empty state and the relay-error banner both surface
+  // a "Switch source" affordance that lands on Workspace.
+  const switchToWorkspace = () => setActive('workspace')
 
   // Hide the chat-heavy tabs when the room isn't ready yet — the
   // invite / peer list on Workspace also depends on room status.
@@ -109,7 +115,7 @@ export function RightDrawer() {
       )}
       {active === 'ai' && (
         <div role='tabpanel' className='flex min-h-0 flex-1 flex-col overflow-hidden'>
-          <AIChatTab />
+          <AIChatTab onSwitchToSetup={switchToWorkspace} />
         </div>
       )}
     </aside>

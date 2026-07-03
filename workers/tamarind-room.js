@@ -247,15 +247,45 @@ class TamarindRoom extends ReadyResource {
     // payload). Convert back to a Buffer here for the HyperDB key
     // encoder — `view.get` / `view.insert` expect a Buffer for any
     // `buffer`-typed key field.
+    //
+    // Upsert by writerKey: if no row exists yet (first push from
+    // this writer), insert. Otherwise apply the update. `applyUpdate`
+    // alone is a no-op when the record is missing, so without the
+    // insert branch the first push silently drops and the
+    // `@tamarind/ai-state` collection stays empty on every peer.
+    // (This is why the host's model never showed up in the guest's
+    // "Pick a source" UI: the first `pushAiStateToRoomWorker` after
+    // boot was a no-op, and only subsequent pushes hit the
+    // already-existing row — but the row was never created, so
+    // every push was a no-op.)
     this.router.add('@tamarind/update-ai-state', async (data, context) => {
+      if (typeof data._writerKey !== 'string' || data._writerKey.length === 0) {
+        // `_writerKey` is required by the protocol — the local worker
+        // always stamps it in `appendAiState`. If it's missing here,
+        // either the dispatch schema lost the field (silently dropped
+        // by the encoder) or something upstream stripped it. Either
+        // way, refusing to insert is better than inserting an empty
+        // Buffer that no peer can match against. Logged loudly so
+        // the regression is visible in the worker console.
+        console.error(
+          '[tamarind-room] update-ai-state: missing _writerKey in dispatch payload, refusing to insert'
+        )
+        return
+      }
       const writerKey = b4a.from(data._writerKey, 'hex')
-      await applyUpdate(context.view, '@tamarind/ai-state', { writerKey }, (existing) => ({
+      const next = {
         writerKey,
         modelId: data.modelId ?? null,
         modelName: data.modelName ?? null,
         loadedAt: data.loadedAt ?? null,
         accepting: !!data.accepting
-      }))
+      }
+      const existing = await context.view.get('@tamarind/ai-state', { writerKey })
+      if (existing) {
+        await applyUpdate(context.view, '@tamarind/ai-state', { writerKey }, () => next)
+      } else {
+        await context.view.insert('@tamarind/ai-state', next)
+      }
     })
 
     // Phase 8: P2P completion relay. The route handlers run inside

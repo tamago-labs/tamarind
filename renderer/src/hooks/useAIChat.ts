@@ -21,8 +21,12 @@
 //     synchronously so the in-progress turn survives a quit right
 //     after the response lands.
 //
-//   - `aiSource` always defaults to `local` on launch (per the
-//     user's locked-in decision 2). No persistence.
+//   - `aiSource` defaults to `null` on launch (per the user's locked-
+//     in decision — explicit choice, no fallback). The user must pick
+//     a source in the Setup tab before they can send. No persistence,
+//     no auto-derivation from peer AI states. If a peer source
+//     disappears mid-session, the source is cleared and the user
+//     must pick again — never an automatic fallback to local.
 
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { bridge } from '../lib/bridge'
@@ -85,6 +89,51 @@ function subscribe(cb: () => void): () => void {
 
 let bootstrapped = false
 let saveDebounceHandle: ReturnType<typeof setTimeout> | null = null
+
+// Watchdog for stuck relay requests. The relay path goes through
+// main → worker → Autobase → peer → peer-worker → peer-main → peer-
+// renderer. If any of those silently fails (network, pipe, schema,
+// etc.) the renderer is left in `isStreaming: true` forever and the
+// user sees a "frozen" chat. After 60s of no relay events for the
+// current requestId, surface a clear timeout error and re-enable
+// the input. The check is per-event so any token / done / error
+// resets the timer.
+const RELAY_WATCHDOG_MS = 60_000
+let watchdogHandle: ReturnType<typeof setTimeout> | null = null
+let watchedRequestId: string | null = null
+
+function armRelayWatchdog(requestId: string) {
+  cancelRelayWatchdog()
+  watchedRequestId = requestId
+  watchdogHandle = setTimeout(() => {
+    if (watchedRequestId !== requestId) return
+    if (!snapshot.isStreaming) return
+    if (snapshot.streamingRequestId !== requestId) return
+    set({
+      error: {
+        code: 'RELAY_TIMEOUT',
+        message:
+          'No response from host after 60s — check that the host is reachable and the model is loaded.',
+        retryable: true
+      },
+      isStreaming: false,
+      streamingRequestId: null
+    })
+    cancelRelayWatchdog()
+  }, RELAY_WATCHDOG_MS)
+}
+
+function kickRelayWatchdog(requestId: string) {
+  if (watchedRequestId === requestId) armRelayWatchdog(requestId)
+}
+
+function cancelRelayWatchdog() {
+  if (watchdogHandle) {
+    clearTimeout(watchdogHandle)
+    watchdogHandle = null
+  }
+  watchedRequestId = null
+}
 
 function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -157,6 +206,7 @@ async function bootstrapOnce() {
       set({ streamingRequestId: e.requestId })
     }
     set({ streamingContent: snapshot.streamingContent + e.text })
+    kickRelayWatchdog(e.requestId)
   })
   bridge.aiChat.onThinking((e: ChatThinkingEvent) => {
     if (snapshot.streamingRequestId !== null && e.requestId !== snapshot.streamingRequestId) {
@@ -166,6 +216,7 @@ async function bootstrapOnce() {
       set({ streamingRequestId: e.requestId })
     }
     set({ streamingThinking: snapshot.streamingThinking + e.text })
+    kickRelayWatchdog(e.requestId)
   })
   bridge.aiChat.onStats((_e: ChatStatsEvent) => {
     // Reserved for future "X tok/s" UI. Intentionally ignored for
@@ -192,6 +243,7 @@ async function bootstrapOnce() {
       streamingModelName: null,
       error: e.stopReason === 'error' ? snapshot.error : null
     })
+    cancelRelayWatchdog()
     flushSaveNow()
     void refreshSessions()
   })
@@ -204,6 +256,7 @@ async function bootstrapOnce() {
       isStreaming: false,
       streamingRequestId: null
     })
+    cancelRelayWatchdog()
     // Persist whatever we got so the user can retry without losing
     // the partial assistant text. Only commit if we have any
     // accumulated content; otherwise drop.
@@ -228,9 +281,23 @@ async function bootstrapOnce() {
   })
 
   // Phase 7: subscribe to peer AI states. Always-on, even if no
-  // peers are connected — events just stay quiet.
+  // peers are connected — events just stay quiet. We use this only
+  // for *validation*: if the current source is a peer and that peer
+  // disappears from the room (model unloaded, writer dropped, etc.)
+  // we clear the source so the AI chat input disables and the user
+  // is forced to pick a new one. We never auto-derive a source from
+  // peer state — the user must click a row in the Setup tab.
   bridge.onPeerAiStates((states) => {
-    set({ aiSource: deriveAiSource(snapshot.aiSource, states) })
+    const current = snapshot.aiSource
+    if (current?.kind === 'peer') {
+      const still = Array.isArray(states)
+        ? states.find((s) => s.writerKey === current.writerKey)
+        : null
+      if (!still) {
+        // Peer is gone — clear the source. No auto-fallback.
+        set({ aiSource: null })
+      }
+    }
   })
 
   // Phase 8: subscribe to relay events. The worker forwards each
@@ -246,8 +313,10 @@ async function bootstrapOnce() {
     if (!e) return
     if (e.kind === 'token' && typeof e.text === 'string') {
       set({ streamingContent: snapshot.streamingContent + e.text })
+      kickRelayWatchdog(e.requestId)
     } else if (e.kind === 'thinking' && typeof e.text === 'string') {
       set({ streamingThinking: snapshot.streamingThinking + e.text })
+      kickRelayWatchdog(e.requestId)
     } else if (e.kind === 'error') {
       set({
         error: e.error || {
@@ -258,6 +327,7 @@ async function bootstrapOnce() {
         isStreaming: false,
         streamingRequestId: null
       })
+      cancelRelayWatchdog()
     } else if (e.kind === 'done' || e.kind === 'busy') {
       // Commit whatever we accumulated.
       if (snapshot.streamingContent || snapshot.streamingThinking) {
@@ -281,42 +351,17 @@ async function bootstrapOnce() {
       } else {
         set({ isStreaming: false, streamingRequestId: null })
       }
+      cancelRelayWatchdog()
     }
   })
 
-  // Hydrate initial sessions list + pinned `main`. The aiSource
-  // always defaults to `local` on launch (locked-in decision 2:
-  // never persist the pick across launches). The modelId/modelName
-  // are filled in lazily — once `useAI().activeModel` resolves, the
-  // UI can promote the placeholder to the real local source.
+  // Hydrate initial sessions list + pinned `main`. The `aiSource`
+  // starts as `null` — the user must pick a source (local or a peer)
+  // in the Setup tab before sending. Locked-in decision: explicit
+  // choice, no auto-derivation, no fallback. The pick is never
+  // persisted across launches.
   await refreshSessions()
   await loadSession('main')
-  set({ aiSource: { kind: 'local', modelId: '', modelName: 'Local model' } })
-}
-
-// ─────────────────────────── AI source derivation ───────────────────────────
-
-function deriveAiSource(
-  current: AiSource | null,
-  peers: Array<{
-    writerKey: string
-    modelId: string | null
-    modelName: string | null
-    accepting: boolean
-  }>
-): AiSource | null {
-  // If the current source is a peer and that peer is no longer in
-  // the list, drop back to null so the UI shows the empty hint.
-  if (current?.kind === 'peer') {
-    const still = peers.find((p) => p.writerKey === current.writerKey)
-    if (!still) return null
-    // Sync the model name in case the peer swapped models.
-    if (still.modelId && still.modelName) {
-      return { ...current, modelId: still.modelId, modelName: still.modelName }
-    }
-    return current
-  }
-  return current
 }
 
 // ─────────────────────────── public API ───────────────────────────
@@ -458,6 +503,7 @@ export function useAIChat(): AIChatApi {
       // as the local path.
       const requestId = `relay-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       set({ streamingRequestId: requestId, isStreaming: true })
+      armRelayWatchdog(requestId)
       const r = await bridge.chat.route({
         requestId,
         targetWriterKey: source.writerKey,
@@ -472,6 +518,7 @@ export function useAIChat(): AIChatApi {
           isStreaming: false,
           streamingRequestId: null
         })
+        cancelRelayWatchdog()
       }
     },
     cancel: async () => {
