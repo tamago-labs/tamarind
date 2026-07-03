@@ -8,11 +8,14 @@ const {
   cancelCurrentRequest,
   unloadCurrent,
   getActiveModelId,
+  getLocalAiStateSnapshot,
   mapError,
   buildStatus,
   resetCache
 } = require('./qvac')
 const { modelStore } = require('./modelStore')
+const aiChat = require('./aiChat')
+const sessions = require('./sessions')
 const path = require('path')
 const PearRuntime = require('pear-runtime')
 const FramedStream = require('framed-stream')
@@ -142,6 +145,52 @@ function getWorker(specifier) {
     sendToAll('pear:worker:stderr:' + specifier, data)
   }
   function sendWorkerIPC(data) {
+    // Phase 7 + 8: intercept worker-bound frames that need to be
+    // handled in main (rather than forwarded to the renderer). The
+    // worker writes JSON to its pipe; main parses and routes. The
+    // `me` frame carries the local writer's z32 key (relay routing
+    // needs it). `relay-run` and `relay-cancel` are incoming from
+    // the worker when a peer's relay request is addressed at us.
+    // `ai-states` is a snapshot push with the current peer AI
+    // states (forwarded to renderers below). `relay-event` is the
+    // peer's response stream arriving for the local requester; we
+    // forward to the renderer's `ai:chat:relay-event` channel.
+    if (specifier === roomWorkerSpecifier) {
+      const text = data.toString()
+      try {
+        const frame = JSON.parse(text)
+        if (frame && typeof frame === 'object') {
+          if (frame.type === 'me' && typeof frame.key === 'string') {
+            setLocalWriterKey(frame.key)
+          } else if (frame.type === 'relay-run') {
+            handleRelayRun(frame).catch((err) => {
+              console.error('[main] handleRelayRun failed:', err)
+            })
+            return
+          } else if (frame.type === 'relay-cancel') {
+            handleRelayCancel(frame)
+            return
+          } else if (frame.type === 'ai-states') {
+            setLastPeerAiStates(frame.states)
+            // Fall through to forward the frame to renderers too —
+            // they listen on `pear:worker:ipc:` and parse themselves.
+          } else if (frame.type === 'relay-event') {
+            // Don't forward the raw `relay-event` to the renderer;
+            // re-emit on the dedicated `ai:chat:relay-event` channel
+            // that the renderer's `bridge.onRelayEvent` subscribes to.
+            sendToAll('ai:chat:relay-event', {
+              requestId: frame.requestId,
+              kind: frame.kind,
+              text: frame.text ?? null,
+              error: frame.error ?? null
+            })
+            return
+          }
+        }
+      } catch {
+        // Not JSON or unparseable — forward as-is.
+      }
+    }
     sendToAll('pear:worker:ipc:' + specifier, data)
   }
   function onBeforeQuit() {
@@ -337,6 +386,8 @@ function registerModelsIpc() {
       const config = modelStore.getAiConfig()
       setActiveConfig(config)
       await ensureModel(entry)
+      // Phase 7: broadcast the new AI state to peers via the worker.
+      pushAiStateToRoomWorker()
       return { success: true }
     } catch (err) {
       const mapped = mapError(err)
@@ -360,6 +411,8 @@ function registerModelsIpc() {
     if (!id) return { success: true }
     try {
       await unloadCurrent(id)
+      // Phase 7: broadcast the cleared AI state to peers.
+      pushAiStateToRoomWorker()
       return { success: true }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to unload model'
@@ -396,6 +449,343 @@ function registerModelsIpc() {
   console.log('Models / AI IPC handlers registered')
 }
 
+// ============================================
+// AI Chat + Sessions IPC Handlers (Phase 6 — local AI chat)
+// ============================================
+//
+// `aiChat` is the streaming chokepoint; it pushes events directly to
+// the renderer (`ai:chat:token`, `ai:chat:thinking`, `ai:chat:done`,
+// `ai:chat:error`, `ai:chat:status`) so we don't need to bridge
+// anything here — `electron/aiChat.js` holds the BrowserWindow ref
+// handed in by `setMainWindow` below.
+//
+// `sessions` is the file-based AI-chat session store. The 'main'
+// session is auto-created on boot (pinned, cannot delete, can clear).
+// Other sessions are created programmatically with `chat-<timestamp>`
+// slugs (the user's locked-in decision).
+
+function registerChatIpc() {
+  ipcMain.handle('chat:send', async (_evt, args) => {
+    return aiChat.sendMessage({ messages: args?.messages ?? [] })
+  })
+  ipcMain.handle('chat:cancel', () => aiChat.cancelMessage())
+  ipcMain.handle('chat:status', () => aiChat.getStatus())
+
+  // Phase 8: route a chat completion to a peer's loaded model over
+  // the Autobase. `args.targetWriterKey` is the z32-encoded writer
+  // pubkey. The worker attaches the `relay-request` dispatch to the
+  // Autobase; the peer's worker routes it to its own `aiChat` chokepoint.
+  ipcMain.handle('chat:route', async (_evt, args) => {
+    return routeChatCompletion(args)
+  })
+  ipcMain.handle('chat:routeCancel', async (_evt, args) => {
+    return cancelRouteChat(args?.requestId)
+  })
+
+  ipcMain.handle('sessions:list', () => sessions.listSessions())
+  ipcMain.handle('sessions:create', () => sessions.createSession())
+  ipcMain.handle('sessions:delete', (_evt, slug) => sessions.deleteSession(slug))
+  ipcMain.handle('sessions:clear', (_evt, slug) => sessions.clearMessages(slug))
+  ipcMain.handle('sessions:load', (_evt, slug) => {
+    try {
+      return { success: true, messages: sessions.loadMessages(slug) }
+    } catch (err) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Load failed',
+        messages: []
+      }
+    }
+  })
+  ipcMain.handle('sessions:save', (_evt, slug, messages) =>
+    sessions.saveMessages(slug, messages)
+  )
+
+  // Phase 7: peer AI states for the Setup tab's "Chat with this
+  // peer" picker. The worker pushes a fresh `ai-states` frame on
+  // every Autobase update that touches `@tamarind/ai-state`; we
+  // forward to the renderer.
+  ipcMain.handle('aiSourcePeers:list', () => lastPeerAiStates)
+  // Push channel subscription — see `onPeerAiStates` below.
+
+  console.log('AI chat / sessions IPC handlers registered')
+}
+
+// ──────────────────── AI state broadcast (Phase 7) ────────────────────
+
+// Phase 7: push the local AI state to the room worker. The worker
+// dispatches `update-ai-state` over the Autobase so peers see the
+// new row in their `@tamarind/ai-state` collection. Called from
+// `models:select` (after a successful load), `ai:unload` (after a
+// successful unload), and once on app start (with the no-model
+// snapshot so the row exists from the first frame).
+function pushAiStateToRoomWorker() {
+  const pipe = workers.get(roomWorkerSpecifier)?.pipe
+  if (!pipe) return
+  const snapshot = getLocalAiStateSnapshot()
+  try {
+    pipe.write(JSON.stringify({ type: 'ai-state-snapshot', snapshot }))
+  } catch (err) {
+    console.warn('[main] pushAiStateToRoomWorker write failed:', err)
+  }
+}
+
+// ──────────────────── Relay routing (Phase 8) ────────────────────
+
+// Phase 8: in-flight relay requests, keyed by requestId. Each entry
+// owns a 50ms token coalescer + a list of buffered text so we don't
+// flood the Autobase with one append per token.
+const relayHandlers = new Map()
+
+// 50ms coalescing window — locked-in decision 1.
+const RELAY_COALESCE_MS = 50
+
+function routeChatCompletion({ requestId, targetWriterKey, messages, modelId }) {
+  if (typeof requestId !== 'string' || requestId.length === 0) {
+    return { success: false, error: 'requestId required' }
+  }
+  if (typeof targetWriterKey !== 'string' || targetWriterKey.length === 0) {
+    return { success: false, error: 'targetWriterKey required' }
+  }
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return { success: false, error: 'messages required' }
+  }
+  if (typeof modelId !== 'string' || modelId.length === 0) {
+    return { success: false, error: 'modelId required' }
+  }
+  const pipe = workers.get(roomWorkerSpecifier)?.pipe
+  if (!pipe) return { success: false, error: 'Worker not running' }
+  const myKey = getLocalWriterKey()
+  if (!myKey) return { success: false, error: 'Local writer key not ready' }
+  try {
+    pipe.write(
+      JSON.stringify({
+        type: 'relay-request',
+        requestId,
+        fromKey: myKey,
+        toKey: targetWriterKey,
+        messages,
+        modelId,
+        createdAt: Date.now()
+      })
+    )
+    return { success: true, requestId }
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Write failed'
+    }
+  }
+}
+
+function cancelRouteChat(requestId) {
+  if (typeof requestId !== 'string') return { success: false, error: 'requestId required' }
+  const pipe = workers.get(roomWorkerSpecifier)?.pipe
+  if (!pipe) return { success: false }
+  const myKey = getLocalWriterKey()
+  if (!myKey) return { success: false }
+  // The worker's relay-cancel route needs to know which peer to send
+  // to, so we look up the in-flight handler for the fromKey.
+  const handler = relayHandlers.get(requestId)
+  const toKey = handler?.toKey
+  try {
+    pipe.write(
+      JSON.stringify({
+        type: 'relay-cancel',
+        requestId,
+        fromKey: myKey,
+        toKey: toKey ?? null
+      })
+    )
+  } catch {
+    // best-effort
+  }
+  return { success: true }
+}
+
+// Phase 8: called by the room worker's `relay-run` frame. Runs a
+// local completion and streams the events back as `relay-response`
+// frames (one per kind with 50ms coalescing for token text).
+async function handleRelayRun({ requestId, fromKey, messages, modelId }) {
+  if (relayHandlers.has(requestId)) {
+    // Duplicate — drop. Single-flight per requestId.
+    return
+  }
+  const entry = {
+    requestId,
+    fromKey,
+    toKey: getLocalWriterKey(),
+    pendingText: null,
+    pendingKind: null,
+    flushTimer: null,
+    closed: false
+  }
+  relayHandlers.set(requestId, entry)
+
+  function flushBuffered() {
+    if (entry.closed) return
+    if (entry.pendingText == null && entry.pendingKind == null) return
+    const pipe = workers.get(roomWorkerSpecifier)?.pipe
+    if (!pipe) return
+    try {
+      pipe.write(
+        JSON.stringify({
+          type: 'relay-response',
+          requestId: entry.requestId,
+          fromKey: entry.toKey,
+          toKey: entry.fromKey,
+          kind: entry.pendingKind,
+          ...(entry.pendingText != null ? { text: entry.pendingText } : {})
+        })
+      )
+    } catch (err) {
+      console.warn('[main] relay-response write failed:', err)
+    }
+    entry.pendingText = null
+    entry.pendingKind = null
+    entry.flushTimer = null
+  }
+  function buffer(kind, text) {
+    if (entry.closed) return
+    if (entry.pendingKind && entry.pendingKind !== kind) flushBuffered()
+    entry.pendingKind = kind
+    entry.pendingText = (entry.pendingText ?? '') + (text ?? '')
+    if (entry.flushTimer) return
+    entry.flushTimer = setTimeout(flushBuffered, RELAY_COALESCE_MS)
+  }
+  function sendImmediate(kind, extra) {
+    if (entry.closed) return
+    flushBuffered()
+    const pipe = workers.get(roomWorkerSpecifier)?.pipe
+    if (!pipe) return
+    try {
+      pipe.write(
+        JSON.stringify({
+          type: 'relay-response',
+          requestId: entry.requestId,
+          fromKey: entry.toKey,
+          toKey: entry.fromKey,
+          kind,
+          ...(extra || {})
+        })
+      )
+    } catch (err) {
+      console.warn('[main] relay-response write failed:', err)
+    }
+  }
+  function close() {
+    if (entry.closed) return
+    entry.closed = true
+    if (entry.flushTimer) {
+      clearTimeout(entry.flushTimer)
+      entry.flushTimer = null
+    }
+    flushBuffered()
+    relayHandlers.delete(requestId)
+  }
+
+  // Run the local completion via aiChat, but subscribe to its
+  // private stream so we can re-emit as relay-response. We can't
+  // re-use the public `sendMessage` because that targets the
+  // renderer's IPC channels, not the worker pipe.
+  // Instead, we run a *parallel* drive that uses the same SDK
+  // completion call but writes to our buffer/sendImmediate/close.
+  try {
+    const { completion } = require('@qvac/sdk')
+    const modelIdLive = getActiveModelId()
+    if (!modelIdLive || modelIdLive !== modelId) {
+      sendImmediate('error', { error: { code: 'MODEL_MISMATCH', message: 'Model not loaded here', retryable: false } })
+      sendImmediate('done')
+      close()
+      return
+    }
+    if (!getLocalAiStateSnapshot().accepting) {
+      sendImmediate('busy')
+      sendImmediate('done')
+      close()
+      return
+    }
+    setStreamingNow(true)
+    const history = messages
+      .filter((m) => m && (m.role === 'user' || m.role === 'assistant'))
+      .map((m) => ({ role: m.role, content: m.content }))
+    const run = completion({
+      modelId: modelIdLive,
+      history,
+      stream: true,
+      kvCache: true,
+      captureThinking: true
+    })
+    sendImmediate('started', { requestId })
+    for await (const event of run.events) {
+      if (entry.closed) break
+      if (event.type === 'contentDelta') {
+        buffer('token', event.text)
+      } else if (event.type === 'thinkingDelta') {
+        buffer('thinking', event.text)
+      } else if (event.type === 'completionDone') {
+        flushBuffered()
+        if (event.stopReason === 'error' && event.error) {
+          sendImmediate('error', { error: { code: 'COMPLETION_ERROR', message: event.error.message, retryable: true } })
+        }
+        sendImmediate('done', { stopReason: event.stopReason ?? 'eos' })
+        break
+      }
+    }
+    setStreamingNow(false)
+    pushAiStateToRoomWorker()
+  } catch (err) {
+    setStreamingNow(false)
+    const mapped = mapError(err)
+    sendImmediate('error', { error: mapped })
+    sendImmediate('done')
+  } finally {
+    close()
+  }
+}
+
+function handleRelayCancel({ requestId }) {
+  const entry = relayHandlers.get(requestId)
+  if (!entry) return
+  entry.closed = true
+  if (entry.flushTimer) {
+    clearTimeout(entry.flushTimer)
+    entry.flushTimer = null
+  }
+  // Best-effort: ask the SDK to cancel whatever the current model is
+  // running. We don't track per-relay requestIds in the SDK, so this
+  // is a coarse cancel — the owner's next drive loop iteration will
+  // see `entry.closed` and break out.
+  try {
+    require('@qvac/sdk').cancel({}).catch(() => {})
+  } catch {
+    // ignore
+  }
+  relayHandlers.delete(requestId)
+}
+
+let lastPeerAiStates = []
+
+function setLastPeerAiStates(states) {
+  lastPeerAiStates = Array.isArray(states) ? states : []
+  // Push to every renderer.
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.webContents.send('ai:peerStates', lastPeerAiStates)
+    }
+  }
+}
+
+// Local writer key (z32) — the room worker publishes this in its
+// initial `me` frame; main caches it here for relay routing.
+let localWriterKey = null
+function setLocalWriterKey(z32key) {
+  localWriterKey = z32key
+}
+function getLocalWriterKey() {
+  return localWriterKey
+}
+
 function handleDeepLink(url) {
   console.log('deep link:', url)
 }
@@ -425,6 +815,12 @@ if (!lock) {
     // AI / Models IPC must be registered before the renderer fires its
     // first invoke; the renderer's useAI() hydrates status() on mount.
     registerModelsIpc()
+    registerChatIpc()
+
+    // Create the 'main' AI chat session directory + empty
+    // messages.json so the first `sessions:list` from the renderer
+    // always finds at least the pinned entry.
+    sessions.ensureMainSession()
 
     createWindow().catch((err) => {
       console.error('Failed to create window:', err)
@@ -432,14 +828,26 @@ if (!lock) {
     })
 
     // Hand the BrowserWindow off to the QVAC layer so it can push
-    // `models:progress` / `models:error` events.
-    setMainWindow(BrowserWindow.getAllWindows()[0] ?? null)
+    // `models:progress` / `models:error` events, and to aiChat so it
+    // can push `ai:chat:*` streaming events.
+    const win = BrowserWindow.getAllWindows()[0] ?? null
+    setMainWindow(win)
+    aiChat.setMainWindow(win)
+
+    // Phase 7: seed the no-model row so the `@tamarind/ai-state`
+    // collection has a record for this writer from the first frame.
+    // The worker reads this and dispatches `update-ai-state`. Once
+    // the worker is up the per-window writer key is captured by the
+    // `me` frame interceptor above.
+    setTimeout(() => pushAiStateToRoomWorker(), 250)
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createWindow()
           .then(() => {
-            setMainWindow(BrowserWindow.getAllWindows()[0] ?? null)
+            const w = BrowserWindow.getAllWindows()[0] ?? null
+            setMainWindow(w)
+            aiChat.setMainWindow(w)
           })
           .catch((err) => {
             console.error('Failed to create window:', err)
@@ -461,6 +869,11 @@ if (!lock) {
       await cancelCurrentRequest({ clearCache: true })
     } catch (e) {
       console.warn('[qvac] before-quit cancel failed:', e)
+    }
+    try {
+      await aiChat.cancelMessage()
+    } catch (e) {
+      console.warn('[aiChat] before-quit cancel failed:', e)
     }
     const modelId = getActiveModelId()
     if (modelId) {

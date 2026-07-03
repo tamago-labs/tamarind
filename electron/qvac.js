@@ -481,6 +481,35 @@ function getActiveEntry() {
 }
 
 /**
+ * Phase 7: P2P AI state awareness (Scope A). The room worker pulls
+ * this snapshot from the local writer so it can broadcast it over
+ * the Autobase as an `update-ai-state` dispatch. Other peers see the
+ * row in their `@tamarind/ai-state` collection and surface it in
+ * the Setup tab's "Chat with this peer" picker.
+ *
+ * `accepting` is false while a chat completion is in flight (we
+ * don't want peers to route a second request at us mid-stream) or
+ * when no model is loaded at all.
+ */
+function getLocalAiStateSnapshot() {
+  const accepting = currentModelId !== null && !isStreamingNow()
+  return {
+    modelId: currentEntry?.id ?? null,
+    modelName: currentEntry?.name ?? null,
+    loadedAt: currentLoadedAt,
+    accepting
+  }
+}
+
+let streamingNowFlag = false
+function setStreamingNow(value) {
+  streamingNowFlag = !!value
+}
+function isStreamingNow() {
+  return streamingNowFlag
+}
+
+/**
  * Builds the modelConfig snapshot for file / https loads. Reads from
  * the module-scope `activeConfig` mirror kept in sync by
  * setActiveConfig(). Registry loads use their own descriptor-driven
@@ -518,6 +547,8 @@ module.exports = {
   unloadCurrent,
   getActiveModelId,
   getActiveEntry,
+  getLocalAiStateSnapshot,
+  setStreamingNow,
   buildStatus,
   findAndUnlinkCacheFile,
   resetCache,

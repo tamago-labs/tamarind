@@ -62,5 +62,74 @@ contextBridge.exposeInMainWorld('bridge', {
     unload: () => ipcRenderer.invoke('ai:unload'),
     getConfig: () => ipcRenderer.invoke('ai-config:get'),
     setConfig: (config) => ipcRenderer.invoke('ai-config:set', config)
+  },
+  // Phase 6: streaming chat completions over the locally loaded model.
+  // The renderer's `useAIChat` hook subscribes to the four event
+  // channels (token / thinking / done / error) and to `ai:chat:status`
+  // for the isStreaming boolean.
+  aiChat: {
+    send: (args) => ipcRenderer.invoke('chat:send', args),
+    cancel: () => ipcRenderer.invoke('chat:cancel'),
+    status: () => ipcRenderer.invoke('chat:status'),
+    onToken: (cb) => {
+      const handler = (_evt, p) => cb(p)
+      ipcRenderer.on('ai:chat:token', handler)
+      return () => ipcRenderer.removeListener('ai:chat:token', handler)
+    },
+    onThinking: (cb) => {
+      const handler = (_evt, p) => cb(p)
+      ipcRenderer.on('ai:chat:thinking', handler)
+      return () => ipcRenderer.removeListener('ai:chat:thinking', handler)
+    },
+    onStats: (cb) => {
+      const handler = (_evt, p) => cb(p)
+      ipcRenderer.on('ai:chat:stats', handler)
+      return () => ipcRenderer.removeListener('ai:chat:stats', handler)
+    },
+    onDone: (cb) => {
+      const handler = (_evt, p) => cb(p)
+      ipcRenderer.on('ai:chat:done', handler)
+      return () => ipcRenderer.removeListener('ai:chat:done', handler)
+    },
+    onError: (cb) => {
+      const handler = (_evt, p) => cb(p)
+      ipcRenderer.on('ai:chat:error', handler)
+      return () => ipcRenderer.removeListener('ai:chat:error', handler)
+    },
+    onStatus: (cb) => {
+      const handler = (_evt, p) => cb(p)
+      ipcRenderer.on('ai:chat:status', handler)
+      return () => ipcRenderer.removeListener('ai:chat:status', handler)
+    }
+  },
+  // Phase 6: file-based AI chat session store. NOT a P2P collection —
+  // the user's locked-in decision. Sessions are <userData>/sessions/<slug>/messages.json.
+  sessions: {
+    list: () => ipcRenderer.invoke('sessions:list'),
+    create: () => ipcRenderer.invoke('sessions:create'),
+    delete: (slug) => ipcRenderer.invoke('sessions:delete', slug),
+    clear: (slug) => ipcRenderer.invoke('sessions:clear', slug),
+    load: (slug) => ipcRenderer.invoke('sessions:load', slug),
+    save: (slug, messages) => ipcRenderer.invoke('sessions:save', slug, messages)
+  },
+  // Phase 7 + 8: P2P AI state + relay routing.
+  aiSourcePeers: () => ipcRenderer.invoke('aiSourcePeers:list'),
+  onPeerAiStates: (cb) => {
+    const handler = (_evt, states) => cb(states)
+    ipcRenderer.on('ai:peerStates', handler)
+    return () => ipcRenderer.removeListener('ai:peerStates', handler)
+  },
+  // AI source persistence deliberately omitted — always defaults to
+  // local on launch (locked-in decision 2).
+  aiSourceGet: () => Promise.resolve(null),
+  aiSourceSet: () => Promise.resolve({ success: false }),
+  chat: {
+    route: (args) => ipcRenderer.invoke('chat:route', args),
+    routeCancel: (requestId) => ipcRenderer.invoke('chat:routeCancel', requestId)
+  },
+  onRelayEvent: (cb) => {
+    const handler = (_evt, e) => cb(e)
+    ipcRenderer.on('ai:chat:relay-event', handler)
+    return () => ipcRenderer.removeListener('ai:chat:relay-event', handler)
   }
 })
