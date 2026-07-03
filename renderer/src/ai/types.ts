@@ -65,7 +65,7 @@ export interface AiStatusShim {
 
 /**
  * Per-load model configuration. Mirrors the values shown in the
- * AIModal "Model configuration" section. `ctx_size` controls the
+ * AIModal Config tab. `ctx_size` controls the
  * llama.cpp context window in tokens; `tools` enables Qwen's
  * tool-calling surface (gated by the SDK's `tools` flag inside
  * `buildModelConfig`).

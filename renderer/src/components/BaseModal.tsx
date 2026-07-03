@@ -24,6 +24,10 @@ export interface BaseModalProps {
   open: boolean
   onClose: () => void
   title: string
+  // Fixed sub-title rendered under the title (e.g. "Set up AI so your
+  // team can chat…"). Distinct from `hint`, which is reserved for
+  // dynamic status (loading %, error, etc.).
+  subtitle?: string
   hint?: string
   // Small icon rendered next to the title (e.g. <LogIn />).
   icon?: ReactNode
@@ -52,6 +56,7 @@ export function BaseModal({
   open,
   onClose,
   title,
+  subtitle,
   hint,
   icon,
   busy = false,
@@ -102,9 +107,12 @@ export function BaseModal({
             className={`w-full max-w-md rounded-lg border p-6 shadow-2xl ${variantClass} ${className}`}
           >
             <div className='flex items-start justify-between gap-4'>
-              <div className='flex items-center gap-2'>
-                {icon}
-                <h2 className='text-lg font-semibold'>{title}</h2>
+              <div className='flex min-w-0 flex-1 flex-col gap-0.5'>
+                <div className='flex items-center gap-2'>
+                  {icon}
+                  <h2 className='text-lg font-semibold'>{title}</h2>
+                </div>
+                {subtitle && <p className='mt-0.5 text-xs opacity-80'>{subtitle}</p>}
               </div>
               <button
                 type='button'
@@ -119,7 +127,7 @@ export function BaseModal({
 
             {hint && <p className='mt-2 text-sm'>{hint}</p>}
 
-            <div className='mt-4'>{children}</div>
+            <div className='mt-4 max-h-[calc(100vh-16rem)] overflow-y-auto pr-1'>{children}</div>
 
             {footer && <div className='mt-5 flex items-center justify-end gap-2'>{footer}</div>}
           </motion.div>

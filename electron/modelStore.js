@@ -15,7 +15,7 @@
 //
 // Phase-5 also adds an `aiConfig: { ctx_size, tools }` field at the
 // same JSON root, persisted across reloads so the AIModal
-// "Model configuration" section survives restarts.
+// Config tab survives restarts.
 
 const { app } = require('electron')
 const { join } = require('path')
@@ -46,7 +46,7 @@ const BUILTIN_PRESETS = [
     params: '1.7B',
     size: 1.28 * 1024 * 1024 * 1024,
     description:
-      'Compact dual-mode reasoning model. Runs easily on low-spec laptops and mobile devices with 4-8 GB RAM.',
+      'Basic model. Runs on low-spec laptops with 4–8 GB RAM. Faster, lighter responses.',
     builtin: true
   },
   {
@@ -57,7 +57,7 @@ const BUILTIN_PRESETS = [
     params: '4B',
     size: 2.5 * 1024 * 1024 * 1024, // 2.50 GB
     description:
-      'Higher-quality balanced model. Runs comfortably on standard 8 GB RAM laptops; discrete GPU optional for acceleration.',
+      'Sharper model. Runs on standard 8 GB+ laptops, ideally with a GPU. Better quality, slower.',
     builtin: true
   }
 ]
@@ -101,6 +101,7 @@ class ModelStore {
     this.load()
     this.scanExistingGguf()
     this.preSeedIfEmpty()
+    this.syncBuiltinMetadata()
     this.save()
   }
 
@@ -161,6 +162,38 @@ class ModelStore {
     if (firstEntryId !== null) {
       this.state.lastSelectedModelId = firstEntryId
     }
+  }
+
+  // Built-in metadata (description / params / size / quantization) is
+  // owned by the app, not the user. When we tighten up the copy or
+  // correct a value, this pass rewrites the matching built-in entries
+  // in place so existing installs pick up the change without nuking
+  // their models.json. Identity is matched by the `source` URL; we
+  // only touch fields Tamarind owns, never the user's `name` or
+  // `createdAt`.
+  syncBuiltinMetadata() {
+    let changed = false
+    for (const preset of BUILTIN_PRESETS) {
+      const entry = this.state.models.find((m) => m.builtin && m.source === preset.source)
+      if (!entry) continue
+      if (entry.description !== preset.description) {
+        entry.description = preset.description
+        changed = true
+      }
+      if (entry.params !== preset.params) {
+        entry.params = preset.params
+        changed = true
+      }
+      if (entry.quantization !== preset.quantization) {
+        entry.quantization = preset.quantization
+        changed = true
+      }
+      if (entry.size !== preset.size) {
+        entry.size = preset.size
+        changed = true
+      }
+    }
+    if (changed) this.save()
   }
 
   scanExistingGguf() {
