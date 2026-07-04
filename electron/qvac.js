@@ -23,6 +23,8 @@ const { existsSync, writeFileSync, mkdirSync, promises: fsPromises } = require('
 const {
   QWEN3_1_7B_INST_Q4,
   QWEN3_4B_INST_Q4_K_M,
+  GEMMA4_31B_MULTIMODAL_Q4_K_M,
+  GEMMA4_4B_MULTIMODAL_Q4_K_M,
   loadModel,
   unloadModel,
   downloadAsset,
@@ -54,8 +56,10 @@ let activeConfig = { ctx_size: 4096, tools: false }
  * `modelStore.js`.
  */
 const REGISTRY_SOURCES = /** @type {Record<string, unknown>} */ ({
-  'qwen3-1.7b-instruct-q4': QWEN3_1_7B_INST_Q4,
-  'qwen3-4b-instruct-q4-k-m': QWEN3_4B_INST_Q4_K_M
+  'qwen3-1.7b-instruct-q4': QWEN3_1_7B_INST_Q4, // expectedSize: 1056782912,
+  'qwen3-4b-instruct-q4-k-m': QWEN3_4B_INST_Q4_K_M, //   expectedSize: 2497280256,
+  'gemma4-31b-q4-k-m': GEMMA4_31B_MULTIMODAL_Q4_K_M, // expectedSize: 19598488192,
+  'gemma4-4b-q4-k-m': GEMMA4_4B_MULTIMODAL_Q4_K_M // expectedSize: 5405168384,
 })
 
 function resolveRegistrySource(source) {

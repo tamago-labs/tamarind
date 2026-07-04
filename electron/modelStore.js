@@ -39,25 +39,47 @@ let entry
 /** @type {Array<Omit<ModelEntry, 'id' | 'createdAt'>>} */
 const BUILTIN_PRESETS = [
   {
-    name: 'QWEN 1.7B',
+    name: 'Qwen 1.7B',
     source: 'registry://qwen3-1.7b-instruct-q4',
     sourceKind: 'registry',
     quantization: 'Q4',
     params: '1.7B',
-    size: 1.28 * 1024 * 1024 * 1024,
+    size: 1_056_782_912, // ≈ 1.0 GB
     description:
-      'Basic model. Runs on low-spec laptops with 4–8 GB RAM. Faster, lighter responses.',
+      'Fast and lightweight. Great for low-spec laptops (4–8 GB RAM). Good for basic assistance.',
     builtin: true
   },
   {
-    name: 'QWEN 4B',
+    name: 'Qwen 4B',
     source: 'registry://qwen3-4b-instruct-q4-k-m',
     sourceKind: 'registry',
     quantization: 'Q4_K_M',
     params: '4B',
-    size: 2.5 * 1024 * 1024 * 1024, // 2.50 GB
+    size: 2_497_280_256, // ≈ 2.5 GB
     description:
-      'Sharper model. Runs on standard 8 GB+ laptops, ideally with a GPU. Better quality, slower.',
+      'Balanced quality and speed. Recommended for most laptops (8 GB+ RAM, ideally with GPU).',
+    builtin: true
+  },
+  {
+    name: 'Gemma 4B',
+    source: 'registry://gemma4-4b-q4-k-m',
+    sourceKind: 'registry',
+    quantization: 'Q4_K_M',
+    params: '4B',
+    size: 5_405_168_384, // ≈ 5.4 GB
+    description:
+      'Google’s Gemma 4B. Strong reasoning and instruction following. Requires 8–16 GB RAM.',
+    builtin: true
+  },
+  {
+    name: 'Gemma 31B',
+    source: 'registry://gemma4-31b-q4-k-m',
+    sourceKind: 'registry',
+    quantization: 'Q4_K_M',
+    params: '31B',
+    size: 19_598_488_192, // ≈ 19.6 GB
+    description:
+      'Google’s powerful Gemma 31B model. High quality responses. Best with 32 GB+ RAM and GPU.',
     builtin: true
   }
 ]
