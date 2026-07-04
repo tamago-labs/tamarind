@@ -34,7 +34,7 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
   const ai = useAI()
   const chat = useAIChat()
   const listRef = useRef<HTMLDivElement | null>(null)
-  const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
   const [draft, setDraft] = useState('')
   const [confirmingClear, setConfirmingClear] = useState(false)
   const [showSessionMenu, setShowSessionMenu] = useState(false)
@@ -99,7 +99,7 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
 
   const inputPlaceholder = isInputDisabled
     ? !chat.aiSource
-      ? 'Pick a source in Workspace to start chatting.'
+      ? 'Pick a source in Workspace first.'
       : chat.aiSource.kind === 'local' && !ai.isReady
         ? 'No model loaded on this device.'
         : 'Type a message…'
@@ -230,7 +230,7 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
         }}
         className='flex items-end gap-1'
       >
-        <textarea
+        <input
           ref={inputRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -241,16 +241,15 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
             }
           }}
           placeholder={inputPlaceholder}
-          disabled={isInputDisabled}
-          rows={2}
-          className='h-14 flex-1 resize-none rounded-md border border-gray-200 bg-white p-2 text-xs text-gray-800 focus:border-tamarind-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50'
+          disabled={isInputDisabled} 
+          className='h-8 flex-1 resize-none rounded-md border border-gray-200 bg-white p-2 text-xs text-gray-800 focus:border-tamarind-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50'
         />
         {chat.isStreaming ? (
           <button
             type='button'
             onClick={() => void chat.cancel()}
             aria-label='Stop generation'
-            className='inline-flex h-14 w-10 items-center justify-center rounded-md bg-red-500 text-white transition hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500'
+            className='inline-flex h-8 w-8 items-center justify-center rounded-md bg-red-500 text-white transition hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500'
           >
             <Square className='h-3.5 w-3.5' aria-hidden='true' />
           </button>
@@ -259,7 +258,7 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
             type='submit'
             disabled={isInputDisabled || draft.trim().length === 0}
             aria-label='Send message'
-            className='inline-flex h-14 w-10 items-center justify-center rounded-md bg-tamarind-700 text-white transition hover:bg-tamarind-800 disabled:cursor-not-allowed disabled:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500'
+            className='inline-flex h-8 w-8 items-center justify-center rounded-md bg-tamarind-700 text-white transition hover:bg-tamarind-800 disabled:cursor-not-allowed disabled:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500'
           >
             <Send className='h-3.5 w-3.5' aria-hidden='true' />
           </button>
@@ -509,7 +508,7 @@ function EmptyState({
     body = (
       <>
         <p className='text-[10px] text-gray-500'>
-          Pick an AI source in Workspace to start chatting.
+          Pick an AI source in Workspace first.
         </p>
         {onSwitchToSetup && (
           <button

@@ -138,8 +138,8 @@ export function AIModelModal({ open, onClose }: AIModelModalProps) {
     <BaseModal
       open={open}
       onClose={onClose}
-      title='Select AI to power your team'
-      subtitle='Set up AI so your team can chat to refine the plan or automate your creation.'
+      title='Enable Team AI'
+      subtitle='Set up AI so your team can refine plans and automation.'
       variant='canvas'
       busy={isLoading}
     >
@@ -176,7 +176,7 @@ export function AIModelModal({ open, onClose }: AIModelModalProps) {
               {/* ── Recommended models ─────────────────────────────── */}
               <section>
                 <h3 className='mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500'>
-                  Recommended
+                  QVAC Registry
                 </h3>
                 {grouped.builtins.length === 0 ? (
                   <p className='text-xs text-gray-500'>No recommended models registered.</p>
@@ -371,7 +371,7 @@ function SelectionBar({
             )}
             {pending && !isLoading && (
               <span className='rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-600'>
-                starting
+                downloading
               </span>
             )}
           </div>
@@ -576,9 +576,9 @@ function ModelRow({
         <div className='min-w-0 flex-1'>
           <div className='flex flex-wrap items-center gap-1.5'>
             <span className='font-medium text-gray-800'>{model.name}</span>
-            <span className='rounded bg-gray-200 px-1.5 py-0.5 font-mono text-[10px] uppercase text-gray-600'>
+            {/* <span className='rounded bg-gray-200 px-1.5 py-0.5 font-mono text-[10px] uppercase text-gray-600'>
               {sourceKindLabel[model.sourceKind]}
-            </span>
+            </span> */}
             {isActive && !isLoading && (
               <span className='rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-700'>
                 Loaded

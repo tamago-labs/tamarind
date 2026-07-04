@@ -60,7 +60,7 @@ export function RightDrawer() {
           [
             { v: 'workspace', label: 'Workspace' },
             { v: 'team', label: 'Team chat' },
-            { v: 'ai', label: 'AI chat' }
+            { v: 'ai', label: 'AI assistant' }
           ] as const
         ).map((opt) => (
           <button

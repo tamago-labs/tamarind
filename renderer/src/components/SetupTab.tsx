@@ -132,7 +132,7 @@ export function SetupTab({ onSwitchToChat }: SetupTabProps) {
       <section>
         <div className='mb-2 flex items-center justify-between'>
           <h3 className='text-xs font-semibold uppercase tracking-wide text-gray-500'>
-            Pick a source
+            AI source
           </h3>
           {chat.aiSource && (
             <button
@@ -147,10 +147,7 @@ export function SetupTab({ onSwitchToChat }: SetupTabProps) {
           )}
         </div>
         <p className='mb-2 text-[10px] text-gray-500'>
-          Pick where AI chat should run. &ldquo;Local&rdquo; uses a model loaded on this device;
-          &ldquo;Host&rdquo; routes every message to the host&rsquo;s model over the room. No
-          automatic fallback — if the host is unreachable, the source clears and you have to pick
-          again.
+          Select AI processing location.
         </p>
         <div className='flex flex-col gap-1.5'>
           <SourceRow
