@@ -156,21 +156,17 @@ export function SplashPage({
         </motion.div>
       )}
 
-      {/* "Join existing board" — always available so a second Tamarind
-          instance can switch from default-host to guest without needing
-          to relaunch with `--invite` on the CLI. The actual paste-and-
-          submit UX lives in the shared `InviteJoinModal` so other
-          surfaces (toolbar quick-join, future deep-link landing) can
-          reuse the same animated dialog. */}
-      <button
-        type='button'
-        onClick={() => setShowJoin(true)}
-        aria-label='Join existing board'
-        className='mt-6 inline-flex items-center gap-1.5 rounded-md border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/30'
-      >
-        <LogIn className='h-3.5 w-3.5' aria-hidden='true' />
-        Join existing board
-      </button>
+      {ready && (
+        <button
+          type='button'
+          onClick={() => setShowJoin(true)}
+          aria-label='Join existing board'
+          className='mt-6 inline-flex items-center gap-1.5 rounded-md border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white/30'
+        >
+          <LogIn className='h-3.5 w-3.5' aria-hidden='true' />
+          Join existing board
+        </button>
+      )}
 
       <InviteJoinModal
         open={showJoin}
