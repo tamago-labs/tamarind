@@ -312,17 +312,17 @@ function ModelCard({
           <span className='truncate text-sm font-medium text-gray-800'>{model.name}</span>
         </div>
 
-        {/* Meta line */}
-        <div className='mt-1.5 flex flex-wrap items-center gap-1.5 pl-6'>
-          {model.quantization && (
-            <span className='text-xs font-medium text-gray-600'>{model.quantization}</span>
-          )}
-          {model.size && (
-            <span className='text-xs text-gray-500'>
-              · {(model.size / 1024 / 1024 / 1024).toFixed(2)} GB
-            </span>
-          )}
-        </div>
+        {/* Description */}
+        {model.description && (
+          <p className='mt-1.5 pl-6 text-xs text-gray-500 line-clamp-2'>{model.description}</p>
+        )}
+
+        {/* File size */}
+        {model.size && (
+          <div className='mt-1.5 pl-6 text-[10px] text-gray-500'>
+            Space required: {(model.size / 1024 / 1024 / 1024).toFixed(2)} GB
+          </div>
+        )}
 
         {/* Badges */}
         <div className='mt-1.5 flex flex-wrap items-center gap-1.5 pl-6'>
