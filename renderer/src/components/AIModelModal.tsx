@@ -504,6 +504,7 @@ function ConfigSection({
 
       {/* ── Load status ──────────────────────────────────────────── */}
       <div className='mt-4 border-t border-gray-200 pt-4'>
+        <h3 className='mb-3 text-sm font-semibold text-gray-700'>Load status</h3>
         {model ? (
           <>
             <div className='flex items-start justify-between gap-3'>
