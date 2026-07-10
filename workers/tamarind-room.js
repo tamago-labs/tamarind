@@ -665,8 +665,9 @@ function decodeItem(raw) {
   }
   if (raw.arrowStart !== undefined && raw.arrowStart !== null) item.arrowStart = raw.arrowStart
   if (raw.arrowEnd !== undefined && raw.arrowEnd !== null) item.arrowEnd = raw.arrowEnd
-  if (raw.strokePattern !== undefined && raw.strokePattern !== null)
+  if (raw.strokePattern !== undefined && raw.strokePattern !== null) {
     item.strokePattern = raw.strokePattern
+  }
   if (raw.curve !== undefined && raw.curve !== null) item.curve = raw.curve
   if (raw.label !== undefined && raw.label !== null) {
     try {

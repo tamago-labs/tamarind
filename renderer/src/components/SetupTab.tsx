@@ -131,9 +131,7 @@ export function SetupTab({ onSwitchToChat }: SetupTabProps) {
       {/* ── Pick a source ───────────────────────────────────────── */}
       <section>
         <div className='mb-2 flex items-center justify-between'>
-          <h3 className='text-xs font-semibold uppercase tracking-wide text-gray-500'>
-            AI source
-          </h3>
+          <h3 className='text-xs font-semibold uppercase tracking-wide text-gray-500'>AI source</h3>
           {chat.aiSource && (
             <button
               type='button'
@@ -146,9 +144,7 @@ export function SetupTab({ onSwitchToChat }: SetupTabProps) {
             </button>
           )}
         </div>
-        <p className='mb-2 text-[10px] text-gray-500'>
-          Select AI processing location.
-        </p>
+        <p className='mb-2 text-[10px] text-gray-500'>Select AI processing location.</p>
         <div className='flex flex-col gap-1.5'>
           <SourceRow
             kind='local'

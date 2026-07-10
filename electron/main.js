@@ -699,7 +699,7 @@ async function handleRelayRun({ requestId, fromKey, messages, modelId }) {
 
   function flushBuffered() {
     if (entry.closed) return
-    if (entry.pendingText == null && entry.pendingKind == null) return
+    if (entry.pendingText === null && entry.pendingKind === null) return
     const pipe = workers.get(roomWorkerSpecifier)?.pipe
     if (!pipe) return
     try {
@@ -710,7 +710,7 @@ async function handleRelayRun({ requestId, fromKey, messages, modelId }) {
           fromKey: entry.toKeyHex,
           toKey: entry.fromKeyHex,
           kind: entry.pendingKind,
-          ...(entry.pendingText != null ? { text: entry.pendingText } : {})
+          ...(entry.pendingText !== null ? { text: entry.pendingText } : {})
         })
       )
     } catch (err) {

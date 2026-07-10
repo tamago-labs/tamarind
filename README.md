@@ -6,7 +6,7 @@ Internet is the first thing to fail when teams need it most. Stadiums, conferenc
 
 **Tamarind** is the tactical whiteboard that works anyway — sports teams, sales teams, and hackathon crews plan strategy offline on a shared canvas, sync P2P with the rest of the team using **Pear by Holepunch**, and get AI-powered suggestions to sharpen their approach through **QVAC**, all without the cloud.
 
-- **Offline-first tactical canvas** —  Multi-board collaborative workspace with templates for sports, sales, system design, or a blank canvas.
+- **Offline-first tactical canvas** — Multi-board collaborative workspace with templates for sports, sales, system design, or a blank canvas.
 - **Peer-to-peer collaboration** — **Hyperswarm** peer discovery with an **Autobase** multi-writer log and **HyperDB** replicated state, enabling conflict-free collaboration without centralized infrastructure.
 - **Built-in team chat** — Share invite codes and communicate alongside your whiteboard.
 - **Local AI assistant** — Execute **Meta Llama**, **Qwen**, and **Gemma** GGUF models locally through **QVAC**, with peer-to-peer AI relay so teammates can use the host's loaded model without downloading their own.
@@ -185,7 +185,6 @@ Additional capabilities planned during the hackathon include:
 - Shared AI preferences replicated through Autobase.
 
 ## Architecture
- 
 
 ### Wire protocol (renderer ↔ TamarindRoom worker)
 
@@ -292,7 +291,6 @@ Two sibling files live alongside the Corestore in `userData/`:
 | `npm run make`               | Platform installers (dmg/msix/appimage/snap/flatpak)             |
 | `npm run lint`               | `prettier --check . && lunte`                                    |
 | `npm run format`             | `prettier --write . && lunte --fix`                              |
-
 
 ## Troubleshooting
 

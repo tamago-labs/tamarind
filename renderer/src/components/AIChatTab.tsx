@@ -241,7 +241,7 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
             }
           }}
           placeholder={inputPlaceholder}
-          disabled={isInputDisabled} 
+          disabled={isInputDisabled}
           className='h-8 flex-1 resize-none rounded-md border border-gray-200 bg-white p-2 text-xs text-gray-800 focus:border-tamarind-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50'
         />
         {chat.isStreaming ? (
@@ -507,9 +507,7 @@ function EmptyState({
   if (!hasSource) {
     body = (
       <>
-        <p className='text-[10px] text-gray-500'>
-          Pick an AI source in Workspace first.
-        </p>
+        <p className='text-[10px] text-gray-500'>Pick an AI source in Workspace first.</p>
         {onSwitchToSetup && (
           <button
             type='button'
