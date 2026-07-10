@@ -52,8 +52,11 @@ import { Marquee } from '../canvas/Marquee'
 import { CanvasFooter } from './CanvasFooter'
 import { CanvasToolbar, type SelectedTool } from './CanvasToolbar'
 import { PropertiesDrawer } from './PropertiesDrawer'
-import { RightDrawer } from './RightDrawer'
 import { TemplatesModal } from './TemplatesModal'
+import { SlideInPanel } from './SlideInPanel'
+import { FloatingChatButton } from './FloatingChatButton'
+import { AIChatTab } from './AIChatTab'
+import { GroupChatPanel } from './GroupChatPanel'
 import { BoardBackupError, buildBackupFilename, parseBackup, serializeBoard } from '../data/boardIO'
 import {
   buildExportFilename,
@@ -200,6 +203,10 @@ export function CanvasPage() {
   // handle the marquee tool.
   const [marqueeMode, setMarqueeMode] = useState(false)
   const marqueeModeRef = useRef(false)
+
+  // Floating chat panels — AI (left) and Team (right)
+  const [showAiChat, setShowAiChat] = useState(false)
+  const [showTeamChat, setShowTeamChat] = useState(false)
 
   // Phase 3: connector draw mode. The toolbar's Connector button flips
   // this; the canvas surface then intercepts pointerdown to start a
@@ -1330,6 +1337,9 @@ export function CanvasPage() {
         canExport={state.activeBoardId !== null}
         onExportSvg={handleExportSvg}
         onExportPng={handleExportPng}
+        invite={room.invite}
+        role={room.role}
+        peers={room.peers}
       />
       {feedbackBanner && (
         <div
@@ -1396,19 +1406,95 @@ export function CanvasPage() {
             onCommit={(ids) => setSelectedIds(new Set(ids))}
           />
         </main>
-        <PropertiesDrawer
-          selectedItem={singleSelected}
-          selectedCount={selectedIds.size}
-          selectedIds={Array.from(selectedIds)}
-          itemsById={itemsById}
-          onUpdate={handleUpdate}
-          onTransientUpdate={handleTransientUpdate}
-          onBringToFront={handleBringToFront}
-          onSendToBack={handleSendToBack}
-          emptyPanel={<RightDrawer />}
-        />
+        {selectedIds.size > 0 && (
+          <PropertiesDrawer
+            selectedItem={singleSelected}
+            selectedCount={selectedIds.size}
+            selectedIds={Array.from(selectedIds)}
+            itemsById={itemsById}
+            onUpdate={handleUpdate}
+            onTransientUpdate={handleTransientUpdate}
+            onBringToFront={handleBringToFront}
+            onSendToBack={handleSendToBack}
+          />
+        )}
       </div>
       <CanvasFooter />
+
+      {/* ── Floating chat buttons ────────────────────────────────── */}
+      <FloatingChatButton
+        onClick={() => setShowAiChat((v) => !v)}
+        label='AI Assistant'
+        side='left'
+        active={showAiChat}
+      >
+        <svg
+          className='h-5 w-5'
+          viewBox='0 0 24 24'
+          fill='none'
+          stroke='currentColor'
+          strokeWidth='2'
+          strokeLinecap='round'
+          strokeLinejoin='round'
+        >
+          <rect x='3' y='11' width='18' height='10' rx='2' />
+          <circle cx='12' cy='5' r='2' />
+          <path d='M12 7v4' />
+          <line x1='8' y1='16' x2='8' y2='16' />
+          <line x1='16' y1='16' x2='16' y2='16' />
+        </svg>
+      </FloatingChatButton>
+      <FloatingChatButton
+        onClick={() => setShowTeamChat((v) => !v)}
+        label='Team Chat'
+        side='right'
+        active={showTeamChat}
+      >
+        <svg
+          className='h-5 w-5'
+          viewBox='0 0 24 24'
+          fill='none'
+          stroke='currentColor'
+          strokeWidth='2'
+        >
+          <path d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' />
+        </svg>
+      </FloatingChatButton>
+
+      {/* ── Slide-in panels ──────────────────────────────────────── */}
+      <SlideInPanel
+        open={showAiChat}
+        onClose={() => setShowAiChat(false)}
+        side='left'
+        title='AI Assistant'
+      >
+        <AIChatTab />
+      </SlideInPanel>
+      <SlideInPanel
+        open={showTeamChat}
+        onClose={() => setShowTeamChat(false)}
+        side='right'
+        title='Team Chat'
+      >
+        <GroupChatPanel
+          invite={room.invite}
+          peers={room.peers}
+          messages={room.chat}
+          role={room.role}
+          writable={room.writable}
+          me={room.me}
+          onSendChat={room.sendChat}
+          onRemoveChat={(id) => room.removeChats([id])}
+          onClearChat={room.clearChat}
+          onCopyInvite={() => {
+            if (!room.invite) return
+            if (navigator.clipboard?.writeText) {
+              navigator.clipboard.writeText(room.invite).catch(() => {})
+            }
+          }}
+        />
+      </SlideInPanel>
+
       <TemplatesModal
         open={templatesOpen}
         onClose={() => setTemplatesOpen(false)}

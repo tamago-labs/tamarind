@@ -24,20 +24,21 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useAI } from '../hooks/useAI'
 import { useAIChat } from '../hooks/useAIChat'
+import { useRoom } from '../hooks/useRoom'
 import type { ChatTurn } from '../ai/types'
 
-interface AIChatTabProps {
-  onSwitchToSetup?: () => void
-}
+interface AIChatTabProps {}
 
-export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
+export function AIChatTab(_props: AIChatTabProps) {
   const ai = useAI()
   const chat = useAIChat()
+  const room = useRoom()
   const listRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [draft, setDraft] = useState('')
   const [confirmingClear, setConfirmingClear] = useState(false)
   const [showSessionMenu, setShowSessionMenu] = useState(false)
+  const [showSourceMenu, setShowSourceMenu] = useState(false)
 
   // Auto-scroll to the bottom of the message list on new content.
   useEffect(() => {
@@ -59,6 +60,34 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
   )
   const sessionLabel =
     currentSession?.slug === 'main' ? 'Main (default)' : (currentSession?.slug ?? '…')
+
+  // Source picker logic (moved from SetupTab)
+  const localKey = room.me?.key
+  const hostState = room.peerAiStates.find((s) => s.writerKey !== localKey) ?? null
+  const hostHasModel = !!(hostState?.modelId && hostState?.modelName)
+
+  function selectLocalSource() {
+    if (!ai.activeModel) return
+    chat.setAiSource({
+      kind: 'local',
+      modelId: ai.activeModel.id,
+      modelName: ai.activeModel.name
+    })
+  }
+
+  function selectHostSource() {
+    if (!hostState) return
+    chat.setAiSource({
+      kind: 'peer',
+      writerKey: hostState.writerKey,
+      modelId: hostState.modelId ?? '',
+      modelName: hostState.modelName ?? 'Host model'
+    })
+  }
+
+  function clearSource() {
+    chat.setAiSource(null)
+  }
 
   function handleSend() {
     const text = draft.trim()
@@ -99,7 +128,7 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
 
   const inputPlaceholder = isInputDisabled
     ? !chat.aiSource
-      ? 'Pick a source in Workspace first.'
+      ? 'Pick an AI source above.'
       : chat.aiSource.kind === 'local' && !ai.isReady
         ? 'No model loaded on this device.'
         : 'Type a message…'
@@ -107,7 +136,7 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
 
   return (
     <div className='flex h-full flex-col gap-2'>
-      {/* ── Session bar ───────────────────────────────────────── */}
+      {/* ── Session bar + Source button ─────────────────────────── */}
       <div className='flex items-center gap-1.5'>
         <div className='relative flex-1'>
           <button
@@ -135,6 +164,112 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
             />
           )}
         </div>
+
+        {/* ── Source button + popover ────────────────────────────── */}
+        <div className='relative'>
+          <button
+            type='button'
+            onClick={() => setShowSourceMenu((v) => !v)}
+            aria-label='Select AI source'
+            title='Select AI source'
+            className={`inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[10px] font-medium transition focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              chat.aiSource
+                ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {chat.aiSource ? (chat.aiSource.kind === 'local' ? 'Local' : 'Host') : 'Source'}
+            <ChevronDown className='h-3 w-3' />
+          </button>
+          {showSourceMenu && (
+            <div className='absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-md border border-gray-200 bg-white shadow-md'>
+              <div className='p-2'>
+                <div className='mb-1.5 flex items-center justify-between'>
+                  <span className='text-[10px] font-semibold uppercase tracking-wide text-gray-500'>
+                    AI Source
+                  </span>
+                  {chat.aiSource && (
+                    <button
+                      type='button'
+                      onClick={() => {
+                        clearSource()
+                        setShowSourceMenu(false)
+                      }}
+                      className='text-[10px] font-semibold uppercase tracking-wide text-gray-500 transition hover:text-red-600'
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div className='flex flex-col gap-1'>
+                  <button
+                    type='button'
+                    onClick={() => {
+                      selectLocalSource()
+                      setShowSourceMenu(false)
+                    }}
+                    disabled={!ai.activeModel}
+                    aria-pressed={chat.aiSource?.kind === 'local'}
+                    className={
+                      chat.aiSource?.kind === 'local'
+                        ? 'flex w-full items-center gap-2 rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-left text-xs transition disabled:cursor-not-allowed disabled:opacity-60'
+                        : 'flex w-full items-center gap-2 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-left text-xs transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60'
+                    }
+                  >
+                    <span
+                      className={`inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-full border-2 ${
+                        chat.aiSource?.kind === 'local'
+                          ? 'border-blue-500 bg-blue-500'
+                          : 'border-gray-300 bg-white'
+                      }`}
+                    >
+                      {chat.aiSource?.kind === 'local' && (
+                        <span className='h-1.5 w-1.5 rounded-full bg-white' />
+                      )}
+                    </span>
+                    <span className='min-w-0 flex-1'>
+                      <span className='font-medium'>Local</span>
+                      <span className='ml-1 text-gray-500'>— This device</span>
+                    </span>
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => {
+                      selectHostSource()
+                      setShowSourceMenu(false)
+                    }}
+                    disabled={!hostHasModel}
+                    aria-pressed={chat.aiSource?.kind === 'peer'}
+                    className={
+                      chat.aiSource?.kind === 'peer'
+                        ? 'flex w-full items-center gap-2 rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-left text-xs transition disabled:cursor-not-allowed disabled:opacity-60'
+                        : 'flex w-full items-center gap-2 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-left text-xs transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60'
+                    }
+                  >
+                    <span
+                      className={`inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-full border-2 ${
+                        chat.aiSource?.kind === 'peer'
+                          ? 'border-blue-500 bg-blue-500'
+                          : 'border-gray-300 bg-white'
+                      }`}
+                    >
+                      {chat.aiSource?.kind === 'peer' && (
+                        <span className='h-1.5 w-1.5 rounded-full bg-white' />
+                      )}
+                    </span>
+                    <span className='min-w-0 flex-1'>
+                      <span className='font-medium'>Host</span>
+                      <span className='ml-1 text-gray-500'>
+                        — {hostHasModel ? (hostState?.modelName ?? 'Model') : 'No model loaded'}
+                      </span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         <button
           type='button'
           onClick={handleClear}
@@ -179,7 +314,6 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
             hasModel={ai.isReady}
             hasSource={!!chat.aiSource}
             sourceIsLocal={chat.aiSource?.kind === 'local'}
-            onSwitchToSetup={onSwitchToSetup}
           />
         ) : (
           <>
@@ -201,15 +335,6 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
               <span className='flex-1'>{chat.error.message}</span>
             </div>
             <div className='flex items-center gap-1.5'>
-              {isRelayErrorCode(chat.error.code) && onSwitchToSetup && (
-                <button
-                  type='button'
-                  onClick={onSwitchToSetup}
-                  className='inline-flex items-center gap-1 rounded-md border border-red-300 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300'
-                >
-                  Switch source
-                </button>
-              )}
               <button
                 type='button'
                 onClick={() => chat.retry()}
@@ -485,45 +610,27 @@ function StreamingBubble({ content, thinking }: { content: string; thinking: str
 function EmptyState({
   hasModel,
   hasSource,
-  sourceIsLocal,
-  onSwitchToSetup
+  sourceIsLocal
 }: {
   hasModel: boolean
   hasSource: boolean
   sourceIsLocal: boolean
-  onSwitchToSetup?: () => void
 }) {
   // Three distinct empty states:
-  //   1. No source at all — primary "Switch source" CTA points to
-  //      the Workspace tab. The user must pick either "This device"
-  //      (which requires a loaded model) or a peer with a loaded
-  //      model.
+  //   1. No source at all — prompt the user to pick a source above.
   //   2. Source is local but no model is loaded — guide the user
   //      through loading a model (via the AI model picker in the
-  //      footer) AND then picking "This device" in Workspace.
+  //      footer) and then picking "Local" in the source picker.
   //   3. Source is set and a model is loaded — generic "start a
   //      conversation" prompt.
   let body: React.ReactNode
   if (!hasSource) {
-    body = (
-      <>
-        <p className='text-[10px] text-gray-500'>Pick an AI source in Workspace first.</p>
-        {onSwitchToSetup && (
-          <button
-            type='button'
-            onClick={onSwitchToSetup}
-            className='mt-1 inline-flex items-center gap-1 rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-blue-700 transition hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
-          >
-            Pick a source
-          </button>
-        )}
-      </>
-    )
+    body = <p className='text-[10px] text-gray-500'>Pick an AI source above to get started.</p>
   } else if (sourceIsLocal && !hasModel) {
     body = (
       <>
         <p className='text-[10px] text-gray-500'>
-          Your source is &ldquo;This device&rdquo; but no model is loaded.
+          Your source is &ldquo;Local&rdquo; but no model is loaded.
         </p>
         <p className='text-[10px] text-gray-500'>
           Open the AI model picker (footer) to load a model.
@@ -547,14 +654,6 @@ function EmptyState({
 
 // Codes that mean "the peer source is no longer reachable — pick a
 // new one". A local SEND_FAILED or completion error doesn't qualify:
-// the user might just want to Retry, not switch sources.
-const RELAY_ERROR_CODES = new Set(['MODEL_MISMATCH', 'RELAY_ERROR', 'ROUTE_FAILED', 'NO_SOURCE'])
-
-function isRelayErrorCode(code: string | undefined | null): boolean {
-  if (!code) return false
-  return RELAY_ERROR_CODES.has(code)
-}
-
 // Minimal markdown component map. No syntax highlighting, no math, no
 // link previews — keep the bundle lean. The full reference is
 // my-doctor-ai/src/renderer/src/pages/Chat.tsx:21-152; we ship the

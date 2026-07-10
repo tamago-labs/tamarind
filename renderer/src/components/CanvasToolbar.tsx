@@ -4,14 +4,18 @@
 //   • Tools           — marquee, shape palette, templates
 //   • Selection       — delete
 //   • History         — undo / redo
+//   • Invite          — invite button with popover
 //
 // Bring-to-front / send-to-back live in the right-side PropertiesDrawer
 // alongside the rest of the per-selection actions, where they belong
 // with text labels rather than glyphs that read as "up/down arrows".
 
+import { useEffect, useRef, useState } from 'react'
 import {
   BookText,
+  Check,
   Circle,
+  Copy,
   Download,
   MousePointerSquareDashed,
   Redo2,
@@ -21,6 +25,7 @@ import {
   Type,
   Undo2,
   Upload,
+  UserPlus,
   ZoomIn,
   ZoomOut
 } from 'lucide-react'
@@ -82,6 +87,10 @@ interface CanvasToolbarProps {
   canExport: boolean
   onExportSvg: () => void
   onExportPng: () => void
+  // Invite / room props
+  invite: string | null
+  role: string | null
+  peers: number
 }
 
 const SHORTCUT_HINT = 'Cmd/Ctrl+Z to undo · Cmd/Ctrl+Shift+Z to redo · Cmd/Ctrl+A to select all'
@@ -224,8 +233,44 @@ export function CanvasToolbar({
   onRestore,
   canExport,
   onExportSvg,
-  onExportPng
+  onExportPng,
+  invite,
+  role,
+  peers
 }: CanvasToolbarProps) {
+  const [showInvite, setShowInvite] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const inviteRef = useRef<HTMLDivElement>(null)
+
+  // Close the invite popover on outside click / Escape.
+  useEffect(() => {
+    if (!showInvite) return
+    function onDocPointerDown(e: PointerEvent) {
+      const el = inviteRef.current
+      if (!el) return
+      if (!el.contains(e.target as Node)) setShowInvite(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setShowInvite(false)
+    }
+    document.addEventListener('pointerdown', onDocPointerDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDocPointerDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [showInvite])
+
+  function handleCopyInvite() {
+    if (!invite) return
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(invite).then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      })
+    }
+  }
+
   return (
     <header
       title={SHORTCUT_HINT}
@@ -330,6 +375,68 @@ export function CanvasToolbar({
         >
           <Redo2 className='h-4 w-4' aria-hidden='true' />
         </IconButton>
+
+        {/* ── Invite button + popover ────────────────────────────── */}
+        <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
+        <div ref={inviteRef} className='relative'>
+          <button
+            type='button'
+            onClick={() => setShowInvite((v) => !v)}
+            aria-label='Invite peers'
+            title='Invite peers'
+            className='inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-gray-700 transition hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500'
+          >
+            <UserPlus className='h-3.5 w-3.5' aria-hidden='true' />
+            Invite
+          </button>
+          {showInvite && (
+            <div className='absolute right-0 top-full z-50 mt-2 w-72 rounded-md border border-gray-200 bg-white shadow-md'>
+              <div className='p-3'>
+                <div className='space-y-2'>
+                  <div className='flex items-center justify-between text-xs'>
+                    <span className='text-gray-500'>Role</span>
+                    <span className='font-medium text-gray-800 capitalize'>
+                      {role ?? 'Connecting…'}
+                    </span>
+                  </div>
+                  <div className='flex items-center justify-between text-xs'>
+                    <span className='text-gray-500'>Peers</span>
+                    <span className='font-medium text-gray-800'>{peers} connected</span>
+                  </div>
+                  {invite && role === 'host' && (
+                    <div className='pt-1'>
+                      <div className='flex items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5'>
+                        <code className='min-w-0 flex-1 truncate font-mono text-xs text-gray-800'>
+                          {invite}
+                        </code>
+                        <button
+                          type='button'
+                          onClick={handleCopyInvite}
+                          aria-label='Copy invite code'
+                          className='shrink-0 rounded p-0.5 text-gray-500 transition hover:bg-gray-200 hover:text-gray-700'
+                        >
+                          {copied ? (
+                            <Check className='h-3.5 w-3.5 text-green-600' />
+                          ) : (
+                            <Copy className='h-3.5 w-3.5' />
+                          )}
+                        </button>
+                      </div>
+                      <p className='mt-1.5 text-[10px] text-gray-500'>
+                        Share this code so peers can join the board.
+                      </p>
+                    </div>
+                  )}
+                  {role === 'guest' && (
+                    <p className='pt-1 text-[10px] text-gray-500'>
+                      You joined using a host-shared code.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   )
