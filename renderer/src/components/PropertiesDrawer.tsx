@@ -407,6 +407,134 @@ function TextSection({
         />
         <span className='w-8 text-right tabular-nums'>{item.fontSize ?? 12}</span>
       </Field>
+      <Field label='Align'>
+        <div className='flex gap-1'>
+          <button
+            type='button'
+            onClick={() => onUpdate(id, { textAlign: 'left' })}
+            aria-label='Align left'
+            className={
+              (item.textAlign ?? 'left') === 'left'
+                ? 'rounded bg-blue-100 p-1 text-blue-700'
+                : 'rounded p-1 text-gray-500 hover:bg-gray-100'
+            }
+          >
+            <svg
+              className='h-4 w-4'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              strokeWidth='2'
+            >
+              <path d='M17 10H3M21 6H3M21 14H3M17 18H3' />
+            </svg>
+          </button>
+          <button
+            type='button'
+            onClick={() => onUpdate(id, { textAlign: 'center' })}
+            aria-label='Align center'
+            className={
+              item.textAlign === 'center'
+                ? 'rounded bg-blue-100 p-1 text-blue-700'
+                : 'rounded p-1 text-gray-500 hover:bg-gray-100'
+            }
+          >
+            <svg
+              className='h-4 w-4'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              strokeWidth='2'
+            >
+              <path d='M18 10H6M21 6H3M21 14H3M18 18H6' />
+            </svg>
+          </button>
+          <button
+            type='button'
+            onClick={() => onUpdate(id, { textAlign: 'right' })}
+            aria-label='Align right'
+            className={
+              item.textAlign === 'right'
+                ? 'rounded bg-blue-100 p-1 text-blue-700'
+                : 'rounded p-1 text-gray-500 hover:bg-gray-100'
+            }
+          >
+            <svg
+              className='h-4 w-4'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              strokeWidth='2'
+            >
+              <path d='M21 10H7M21 6H3M21 14H3M21 18H7' />
+            </svg>
+          </button>
+        </div>
+      </Field>
+      <Field label='Vertical'>
+        <div className='flex gap-1'>
+          <button
+            type='button'
+            onClick={() => onUpdate(id, { textAlignVertical: 'top' })}
+            aria-label='Align top'
+            className={
+              (item.textAlignVertical ?? 'top') === 'top'
+                ? 'rounded bg-blue-100 p-1 text-blue-700'
+                : 'rounded p-1 text-gray-500 hover:bg-gray-100'
+            }
+          >
+            <svg
+              className='h-4 w-4'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              strokeWidth='2'
+            >
+              <path d='M10 3H21V5H10V3ZM10 7H21V9H10V7ZM10 11H21V13H10V11ZM10 15H21V17H10V15ZM10 19H21V21H10V19Z' />
+            </svg>
+          </button>
+          <button
+            type='button'
+            onClick={() => onUpdate(id, { textAlignVertical: 'middle' })}
+            aria-label='Align middle'
+            className={
+              item.textAlignVertical === 'middle'
+                ? 'rounded bg-blue-100 p-1 text-blue-700'
+                : 'rounded p-1 text-gray-500 hover:bg-gray-100'
+            }
+          >
+            <svg
+              className='h-4 w-4'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              strokeWidth='2'
+            >
+              <path d='M10 3H21V5H10V3ZM10 7H21V9H10V7ZM3 11H21V13H3V11ZM10 15H21V17H10V15ZM10 19H21V21H10V19Z' />
+            </svg>
+          </button>
+          <button
+            type='button'
+            onClick={() => onUpdate(id, { textAlignVertical: 'bottom' })}
+            aria-label='Align bottom'
+            className={
+              item.textAlignVertical === 'bottom'
+                ? 'rounded bg-blue-100 p-1 text-blue-700'
+                : 'rounded p-1 text-gray-500 hover:bg-gray-100'
+            }
+          >
+            <svg
+              className='h-4 w-4'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              strokeWidth='2'
+            >
+              <path d='M10 3H21V5H10V3ZM10 7H21V9H10V7ZM10 11H21V13H10V11ZM10 15H21V17H10V15ZM3 19H21V21H3V19Z' />
+            </svg>
+          </button>
+        </div>
+      </Field>
     </div>
   )
 }

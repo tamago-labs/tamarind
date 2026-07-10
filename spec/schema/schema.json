@@ -199,6 +199,16 @@
           "version": 1
         },
         {
+          "name": "textAlign",
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "textAlignVertical",
+          "type": "string",
+          "version": 1
+        },
+        {
           "name": "order",
           "required": true,
           "type": "int",

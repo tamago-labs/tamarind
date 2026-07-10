@@ -81,6 +81,8 @@ schema.register({
     { name: 'strokePattern', type: 'string' },
     { name: 'curve', type: 'string' },
     { name: 'label', type: 'string' },
+    { name: 'textAlign', type: 'string' },
+    { name: 'textAlignVertical', type: 'string' },
     { name: 'order', type: 'int', required: true },
     { name: 'updatedAt', type: 'int', required: true }
   ]

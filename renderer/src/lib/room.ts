@@ -71,6 +71,8 @@ export interface BoardScopedItemSnapshot {
   fill?: string
   lineCap?: string
   fontSize?: number
+  textAlign?: string
+  textAlignVertical?: string
   order: number
   updatedAt: number
 }

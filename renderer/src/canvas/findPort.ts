@@ -29,7 +29,7 @@ export function findNearestPort(
     // shapes still have w/h so they're included).
     if (item.type === 'connector') continue
     if (item.w === undefined || item.h === undefined) continue
-    for (const port of ['top', 'right', 'bottom', 'left', 'center'] as Port[]) {
+    for (const port of ['top', 'right', 'bottom', 'left'] as Port[]) {
       const p = getPortWorld(item, port)
       const d = Math.hypot(p.x - cursor.x, p.y - cursor.y)
       if (d <= radiusWorld && (best === null || d < best.d)) {

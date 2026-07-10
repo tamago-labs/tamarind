@@ -72,12 +72,12 @@ const MIN_SHAPE_SIZE = 20
 // Snap radius for the connector draw flow. Same screen-pixel value as
 // the existing `ConnectorHandles` so the two paths feel identical;
 // `clientToWorld` divides by zoom to convert to world units.
-const CONNECTOR_SNAP_RADIUS_PX = 30
+const CONNECTOR_SNAP_RADIUS_PX = 40
 // Minimum distance (world units) the cursor must travel between
 // pointerdown and pointerup to count as a "draw" rather than a click.
 // Clicks without movement drop the draft without committing — keeps
 // the canvas free of 0-length connectors from accidental clicks.
-const CONNECTOR_MIN_DRAG_DISTANCE = 8
+const CONNECTOR_MIN_DRAG_DISTANCE = 4
 
 function makeInitialCanvasState(): CanvasState {
   const now = Date.now()
@@ -1430,7 +1430,8 @@ export function CanvasPage() {
             />
             <CanvasOverlay
               showPorts={selectedTool === 'connector'}
-              hoverShape={hoverShapeId ? (itemsById[hoverShapeId] ?? null) : null}
+              items={itemsArray}
+              hoverShapeId={hoverShapeId}
               zoom={zoom}
               draft={draft}
             />

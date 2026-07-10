@@ -21,7 +21,7 @@ export interface Board {
 // port and move with it. `orphan` ends remember the deleted shape's
 // port position so the line stays visually in place after the host is
 // removed. `free` ends carry explicit world coordinates.
-export type Port = 'top' | 'right' | 'bottom' | 'left' | 'center'
+export type Port = 'top' | 'right' | 'bottom' | 'left'
 
 export type ConnectorEnd =
   | { kind: 'free'; x: number; y: number }
@@ -112,6 +112,8 @@ export interface BoardScopedItem {
   fill?: string
   lineCap?: LineCap
   fontSize?: number
+  textAlign?: 'left' | 'center' | 'right'
+  textAlignVertical?: 'top' | 'middle' | 'bottom'
   // Phase 3 connector-only styling. Optional; absent decodes to the
   // visual default (no arrowheads at either end, solid stroke, straight
   // curve, no label).
@@ -193,8 +195,6 @@ export function getPortWorld(item: BoardScopedItem, port: Port): { x: number; y:
       return { x: item.x + w / 2, y: item.y + h }
     case 'left':
       return { x: item.x, y: item.y + h / 2 }
-    case 'center':
-      return { x: item.x + w / 2, y: item.y + h / 2 }
   }
 }
 

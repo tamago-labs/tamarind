@@ -9,6 +9,8 @@
 //   • Esc → cancel and revert to the previous text.
 //   • The text adapts to the shape's bounding box: padding is 8/10,
 //     line height 1.3, font-size is `item.fontSize`.
+//   • Text alignment (horizontal + vertical) is configurable via
+//     `item.textAlign` and `item.textAlignVertical`.
 //
 // Edits dispatch through the parent's `onUpdate` callback. Inside a
 // drag, `onUpdate` is wrapped to dispatch transient (so the
@@ -58,6 +60,15 @@ export function TextOverlay({ item, width, height, onUpdate }: TextOverlayProps)
   const fontSize = item.fontSize ?? DEFAULT_NOTE_FONT_SIZE
   const textColor = item.stroke ?? '#000000'
 
+  // Alignment styles
+  const textAlign = item.textAlign ?? 'left'
+  const justifyContent =
+    item.textAlignVertical === 'middle'
+      ? 'center'
+      : item.textAlignVertical === 'bottom'
+        ? 'flex-end'
+        : 'flex-start'
+
   return (
     <foreignObject x={item.x} y={item.y} width={width} height={height}>
       {editing ? (
@@ -89,6 +100,7 @@ export function TextOverlay({ item, width, height, onUpdate }: TextOverlayProps)
             fontSize,
             fontFamily: 'var(--font-display)',
             lineHeight: 1.3,
+            textAlign,
             outline: 'none',
             resize: 'none',
             boxSizing: 'border-box'
@@ -108,6 +120,10 @@ export function TextOverlay({ item, width, height, onUpdate }: TextOverlayProps)
             fontSize,
             fontFamily: 'var(--font-display)',
             lineHeight: 1.3,
+            textAlign,
+            justifyContent,
+            display: 'flex',
+            flexDirection: 'column',
             overflow: 'hidden',
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',

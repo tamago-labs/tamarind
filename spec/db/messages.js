@@ -106,7 +106,9 @@ const encoding3 = {
       (m.arrowEnd ? 512 : 0) |
       (m.strokePattern ? 1024 : 0) |
       (m.curve ? 2048 : 0) |
-      (m.label ? 4096 : 0)
+      (m.label ? 4096 : 0) |
+      (m.textAlign ? 8192 : 0) |
+      (m.textAlignVertical ? 16384 : 0)
 
     c.buffer.preencode(state, m.id)
     c.buffer.preencode(state, m.boardId)
@@ -130,6 +132,8 @@ const encoding3 = {
     if (m.strokePattern) c.string.preencode(state, m.strokePattern)
     if (m.curve) c.string.preencode(state, m.curve)
     if (m.label) c.string.preencode(state, m.label)
+    if (m.textAlign) c.string.preencode(state, m.textAlign)
+    if (m.textAlignVertical) c.string.preencode(state, m.textAlignVertical)
     c.int.preencode(state, m.order)
     c.int.preencode(state, m.updatedAt)
   },
@@ -147,7 +151,9 @@ const encoding3 = {
       (m.arrowEnd ? 512 : 0) |
       (m.strokePattern ? 1024 : 0) |
       (m.curve ? 2048 : 0) |
-      (m.label ? 4096 : 0)
+      (m.label ? 4096 : 0) |
+      (m.textAlign ? 8192 : 0) |
+      (m.textAlignVertical ? 16384 : 0)
 
     c.buffer.encode(state, m.id)
     c.buffer.encode(state, m.boardId)
@@ -171,6 +177,8 @@ const encoding3 = {
     if (m.strokePattern) c.string.encode(state, m.strokePattern)
     if (m.curve) c.string.encode(state, m.curve)
     if (m.label) c.string.encode(state, m.label)
+    if (m.textAlign) c.string.encode(state, m.textAlign)
+    if (m.textAlignVertical) c.string.encode(state, m.textAlignVertical)
     c.int.encode(state, m.order)
     c.int.encode(state, m.updatedAt)
   },
@@ -203,6 +211,8 @@ const encoding3 = {
       strokePattern: (flags & 1024) !== 0 ? c.string.decode(state) : null,
       curve: (flags & 2048) !== 0 ? c.string.decode(state) : null,
       label: (flags & 4096) !== 0 ? c.string.decode(state) : null,
+      textAlign: (flags & 8192) !== 0 ? c.string.decode(state) : null,
+      textAlignVertical: (flags & 16384) !== 0 ? c.string.decode(state) : null,
       order: c.int.decode(state),
       updatedAt: c.int.decode(state)
     }
@@ -595,7 +605,9 @@ const encoding19 = {
       (m.arrowEnd ? 512 : 0) |
       (m.strokePattern ? 1024 : 0) |
       (m.curve ? 2048 : 0) |
-      (m.label ? 4096 : 0)
+      (m.label ? 4096 : 0) |
+      (m.textAlign ? 8192 : 0) |
+      (m.textAlignVertical ? 16384 : 0)
 
     c.buffer.preencode(state, m.boardId)
     c.string.preencode(state, m.type)
@@ -618,6 +630,8 @@ const encoding19 = {
     if (m.strokePattern) c.string.preencode(state, m.strokePattern)
     if (m.curve) c.string.preencode(state, m.curve)
     if (m.label) c.string.preencode(state, m.label)
+    if (m.textAlign) c.string.preencode(state, m.textAlign)
+    if (m.textAlignVertical) c.string.preencode(state, m.textAlignVertical)
     c.int.preencode(state, m.order)
     c.int.preencode(state, m.updatedAt)
   },
@@ -635,7 +649,9 @@ const encoding19 = {
       (m.arrowEnd ? 512 : 0) |
       (m.strokePattern ? 1024 : 0) |
       (m.curve ? 2048 : 0) |
-      (m.label ? 4096 : 0)
+      (m.label ? 4096 : 0) |
+      (m.textAlign ? 8192 : 0) |
+      (m.textAlignVertical ? 16384 : 0)
 
     c.buffer.encode(state, m.boardId)
     c.string.encode(state, m.type)
@@ -658,6 +674,8 @@ const encoding19 = {
     if (m.strokePattern) c.string.encode(state, m.strokePattern)
     if (m.curve) c.string.encode(state, m.curve)
     if (m.label) c.string.encode(state, m.label)
+    if (m.textAlign) c.string.encode(state, m.textAlign)
+    if (m.textAlignVertical) c.string.encode(state, m.textAlignVertical)
     c.int.encode(state, m.order)
     c.int.encode(state, m.updatedAt)
   },
@@ -689,6 +707,8 @@ const encoding19 = {
       strokePattern: (flags & 1024) !== 0 ? c.string.decode(state) : null,
       curve: (flags & 2048) !== 0 ? c.string.decode(state) : null,
       label: (flags & 4096) !== 0 ? c.string.decode(state) : null,
+      textAlign: (flags & 8192) !== 0 ? c.string.decode(state) : null,
+      textAlignVertical: (flags & 16384) !== 0 ? c.string.decode(state) : null,
       order: c.int.decode(state),
       updatedAt: c.int.decode(state)
     }

@@ -626,6 +626,8 @@ function encodeItem(it) {
   if (it.strokePattern !== undefined) encoded.strokePattern = it.strokePattern
   if (it.curve !== undefined) encoded.curve = it.curve
   if (it.label !== undefined) encoded.label = JSON.stringify(it.label)
+  if (it.textAlign !== undefined) encoded.textAlign = it.textAlign
+  if (it.textAlignVertical !== undefined) encoded.textAlignVertical = it.textAlignVertical
   return encoded
 }
 
@@ -675,6 +677,10 @@ function decodeItem(raw) {
     } catch {
       item.label = undefined
     }
+  }
+  if (raw.textAlign !== undefined && raw.textAlign !== null) item.textAlign = raw.textAlign
+  if (raw.textAlignVertical !== undefined && raw.textAlignVertical !== null) {
+    item.textAlignVertical = raw.textAlignVertical
   }
   return item
 }
