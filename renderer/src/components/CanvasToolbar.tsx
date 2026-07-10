@@ -10,17 +10,17 @@
 // with text labels rather than glyphs that read as "up/down arrows".
 
 import {
+  BookText,
   Circle,
-  FolderOpen,
-  LayoutTemplate,
+  Download,
   MousePointerSquareDashed,
   Redo2,
-  Save,
   Spline,
   Square,
   Trash2,
   Type,
   Undo2,
+  Upload,
   ZoomIn,
   ZoomOut
 } from 'lucide-react'
@@ -242,10 +242,10 @@ export function CanvasToolbar({
           onDelete={onDeleteBoard}
         />
         <IconButton label='Backup board to file' onClick={onBackup} disabled={!canBackup}>
-          <Save className='h-4 w-4' aria-hidden='true' />
+          <Download className='h-4 w-4' aria-hidden='true' />
         </IconButton>
         <IconButton label='Restore board from file' onClick={onRestore} disabled={!canRestore}>
-          <FolderOpen className='h-4 w-4' aria-hidden='true' />
+          <Upload className='h-4 w-4' aria-hidden='true' />
         </IconButton>
         <ExportMenu
           canExport={canExport}
@@ -305,7 +305,7 @@ export function CanvasToolbar({
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 
         <IconButton label='Templates' onClick={onOpenTemplates}>
-          <LayoutTemplate className='h-4 w-4' aria-hidden='true' />
+          <BookText className='h-4 w-4' aria-hidden='true' />
         </IconButton>
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 
