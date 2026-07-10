@@ -314,15 +314,12 @@ function ModelCard({
 
         {/* Meta line */}
         <div className='mt-1.5 flex flex-wrap items-center gap-1.5 pl-6'>
-          {model.params && <span className='text-xs text-gray-600'>{model.params}</span>}
           {model.quantization && (
-            <span className='rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600'>
-              {model.quantization}
-            </span>
+            <span className='text-xs font-medium text-gray-600'>{model.quantization}</span>
           )}
           {model.size && (
-            <span className='text-[10px] text-gray-500'>
-              {(model.size / 1024 / 1024 / 1024).toFixed(2)} GB
+            <span className='text-xs text-gray-500'>
+              · {(model.size / 1024 / 1024 / 1024).toFixed(2)} GB
             </span>
           )}
         </div>
