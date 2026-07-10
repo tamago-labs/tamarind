@@ -78,11 +78,9 @@ export function AIModelModal({ open, onClose }: AIModelModalProps) {
 
   const isSelectedActive = !!ai.activeModel && ai.activeModel.id === selectedId
   const isSelectedLoading = isLoading && isSelectedActive
-  // Hide the picker once a model is loaded — the user must Unload
-  // first before they can pick a different one. Re-show it during a
-  // load (so the in-flight progress row is visible) or if no model
-  // is loaded yet.
-  const showPicker = !ai.activeModel || isLoading || pendingLoad
+  // Always show the model list — disable selection when a model is
+  // already loaded (user must Unload first before picking another).
+  const pickerDisabled = !!ai.activeModel && !isLoading && !pendingLoad && !ai.error
 
   async function handleAdd(entry: {
     name: string
@@ -122,10 +120,10 @@ export function AIModelModal({ open, onClose }: AIModelModalProps) {
   }
 
   async function handleUnload(): Promise<void> {
-    await ai.unload()
-    // Clear the local selection so the picker lands on a fresh empty
-    // state instead of re-presenting the model that was just released.
+    // Clear selection and error first so picker shows immediately
     setSelectedId(null)
+    ai.setError(null)
+    await ai.unload()
   }
 
   return (
@@ -161,94 +159,92 @@ export function AIModelModal({ open, onClose }: AIModelModalProps) {
           )}
 
           {/* ── Model picker (QVAC Registry + Custom + Add custom)
-              Hidden when a model is fully loaded and the user hasn't
-              clicked "Switch model" — the loaded card with Unload +
-              Switch is the only thing they need. Re-shown during a
-              load (so progress is visible) or after Switch. */}
-          {showPicker && (
-            <>
-              {/* ── Tabs ────────────────────────────────────────── */}
-              <div
-                role='tablist'
-                aria-label='Model source'
-                className='inline-flex overflow-hidden rounded-lg border border-gray-200 bg-white'
+              Always visible — disabled when a model is loaded so the
+              user can see what's available but must Unload first. */}
+          <>
+            {/* ── Tabs ────────────────────────────────────────── */}
+            <div
+              role='tablist'
+              aria-label='Model source'
+              className='inline-flex overflow-hidden rounded-lg border border-gray-200 bg-white'
+            >
+              <button
+                type='button'
+                role='tab'
+                aria-selected={activeTab === 'registry'}
+                disabled={pickerDisabled}
+                onClick={() => setActiveTab('registry')}
+                className={
+                  activeTab === 'registry'
+                    ? 'bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800'
+                    : 'border-r border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50'
+                }
               >
-                <button
-                  type='button'
-                  role='tab'
-                  aria-selected={activeTab === 'registry'}
-                  onClick={() => setActiveTab('registry')}
-                  className={
-                    activeTab === 'registry'
-                      ? 'bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800'
-                      : 'border-r border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50'
-                  }
-                >
-                  QVAC Registry
-                </button>
-                <button
-                  type='button'
-                  role='tab'
-                  aria-selected={activeTab === 'custom'}
-                  onClick={() => setActiveTab('custom')}
-                  className={
-                    activeTab === 'custom'
-                      ? 'bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800'
-                      : 'px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50'
-                  }
-                >
-                  Custom
-                </button>
-              </div>
+                QVAC Registry
+              </button>
+              <button
+                type='button'
+                role='tab'
+                aria-selected={activeTab === 'custom'}
+                disabled={pickerDisabled}
+                onClick={() => setActiveTab('custom')}
+                className={
+                  activeTab === 'custom'
+                    ? 'bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800'
+                    : 'px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50'
+                }
+              >
+                Custom
+              </button>
+            </div>
 
-              {/* ── Tab content ──────────────────────────────────── */}
-              {activeTab === 'registry' && (
-                <section>
-                  {grouped.builtins.length === 0 ? (
-                    <p className='text-sm text-gray-500'>No recommended models registered.</p>
-                  ) : (
-                    <div className='grid grid-cols-2 gap-2.5'>
-                      {grouped.builtins.map((m) => (
-                        <ModelCard
-                          key={m.id}
-                          model={m}
-                          isSelected={selectedId === m.id}
-                          isActive={ai.activeModel?.id === m.id}
-                          isLoading={isLoading && ai.activeModel?.id === m.id}
-                          progress={isLoading && ai.activeModel?.id === m.id ? ai.progress : null}
-                          onSelect={() => setSelectedId(m.id)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </section>
-              )}
+            {/* ── Tab content ──────────────────────────────────── */}
+            {activeTab === 'registry' && (
+              <section className={pickerDisabled ? 'opacity-50 pointer-events-none' : ''}>
+                {grouped.builtins.length === 0 ? (
+                  <p className='text-sm text-gray-500'>No recommended models registered.</p>
+                ) : (
+                  <div className='grid grid-cols-2 gap-2.5'>
+                    {grouped.builtins.map((m) => (
+                      <ModelCard
+                        key={m.id}
+                        model={m}
+                        isSelected={selectedId === m.id}
+                        isActive={ai.activeModel?.id === m.id}
+                        isLoading={isLoading && ai.activeModel?.id === m.id}
+                        progress={isLoading && ai.activeModel?.id === m.id ? ai.progress : null}
+                        onSelect={() => setSelectedId(m.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
 
-              {activeTab === 'custom' && (
-                <>
-                  <section>
-                    {grouped.customs.length === 0 ? (
-                      <p className='text-sm text-gray-500'>No custom models added yet.</p>
-                    ) : (
-                      <div className='grid grid-cols-2 gap-2.5'>
-                        {grouped.customs.map((m) => (
-                          <ModelCard
-                            key={m.id}
-                            model={m}
-                            isSelected={selectedId === m.id}
-                            isActive={ai.activeModel?.id === m.id}
-                            isLoading={isLoading && ai.activeModel?.id === m.id}
-                            progress={isLoading && ai.activeModel?.id === m.id ? ai.progress : null}
-                            onSelect={() => setSelectedId(m.id)}
-                            onRemove={() => void handleRemove(m.id)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </section>
+            {activeTab === 'custom' && (
+              <section className={pickerDisabled ? 'opacity-50 pointer-events-none' : ''}>
+                {grouped.customs.length === 0 ? (
+                  <p className='text-sm text-gray-500'>No custom models added yet.</p>
+                ) : (
+                  <div className='grid grid-cols-2 gap-2.5'>
+                    {grouped.customs.map((m) => (
+                      <ModelCard
+                        key={m.id}
+                        model={m}
+                        isSelected={selectedId === m.id}
+                        isActive={ai.activeModel?.id === m.id}
+                        isLoading={isLoading && ai.activeModel?.id === m.id}
+                        progress={isLoading && ai.activeModel?.id === m.id ? ai.progress : null}
+                        onSelect={() => setSelectedId(m.id)}
+                        onRemove={() => void handleRemove(m.id)}
+                      />
+                    ))}
+                  </div>
+                )}
 
-                  {/* ── Add custom ─────────────────────────────────── */}
-                  <section>
+                {/* ── Add custom ─────────────────────────────────── */}
+                {!pickerDisabled && (
+                  <div className='mt-3'>
                     {!showAdd ? (
                       <button
                         type='button'
@@ -264,11 +260,11 @@ export function AIModelModal({ open, onClose }: AIModelModalProps) {
                         onCancel={() => setShowAdd(false)}
                       />
                     )}
-                  </section>
-                </>
-              )}
-            </>
-          )}
+                  </div>
+                )}
+              </section>
+            )}
+          </>
         </div>
 
         {/* ── Right column: Config + Load status ────────────────── */}
