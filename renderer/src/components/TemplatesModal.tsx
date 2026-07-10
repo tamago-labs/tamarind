@@ -1,4 +1,4 @@
-// Templates modal. Shows a single horizontal row of pre-built layouts
+// Templates modal. Shows a 2-per-row grid of pre-built layouts
 // the user can drop into the current board. Each card has a hand-rolled
 // SVG thumbnail (see `data/templatesThumbnails.tsx`) + a name + short
 // description + an Insert button.
@@ -40,11 +40,11 @@ export function TemplatesModal({ open, onClose, onInsert }: TemplatesModalProps)
         </button>
       }
     >
-      <div className='-mx-1 flex flex-row gap-3 overflow-x-auto px-1 pb-1'>
+      <div className='grid grid-cols-2 gap-4'>
         {TEMPLATES.map((tpl) => (
           <div
             key={tpl.id}
-            className='flex w-56 shrink-0 flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3'
+            className='flex flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3'
           >
             <TemplateThumbnail id={tpl.id} style={{ aspectRatio: '8 / 5' }} />
             <div className='flex flex-col gap-0.5'>

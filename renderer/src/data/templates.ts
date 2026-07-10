@@ -157,23 +157,21 @@ function connector(
 const FOOTBALL: Template = {
   id: 'football',
   name: 'Football pitch',
-  description: '11 players + 2 arrows for a pass-and-run pattern',
+  description: '11 players + tactical arrows showing pass and run',
   build: () => {
     const pitchW = 520
     const pitchH = 360
     const items: BoardScopedItem[] = []
-    // Pitch background (green tint — gives the football layout its
-    // pitch identity when dropped on the white canvas).
+    // Pitch background (green tint — renders behind everything).
     items.push(rect(40, 40, pitchW, pitchH, { fill: '#86efac' }))
-    // Center line — bare line, no arrowheads (this is a structural
-    // pitch marking, not a directional indicator).
+    // Center line.
     items.push(connector(40 + pitchW / 2, 40, 40 + pitchW / 2, 40 + pitchH, { arrowEnd: 'none' }))
-    // Center circle (approximated with an ellipse outline).
+    // Center circle.
     items.push({
       ...ellipse(40 + pitchW / 2 - 40, 40 + pitchH / 2 - 40, 80, 80, { fill: 'none' }),
       text: undefined
     })
-    // 11 players — 1 GK + 4 defenders + 3 mids + 3 forwards.
+    // 11 players.
     const playerW = 36
     const playerH = 36
     const labels: Array<[number, number, string]> = [
@@ -192,20 +190,30 @@ const FOOTBALL: Template = {
     for (const [x, y, label] of labels) {
       items.push(ellipse(x, y, playerW, playerH, { text: label }))
     }
-    // Pass + run: CM → AM and AM runs upfield.
+    // Tactical arrows with labels.
     const cm = labels[6]
     const am = labels[8]
+    const lw = labels[9]
+    const rw = labels[10]
+    // CM → AM (through ball)
     items.push(
-      connector(
-        cm[0] + playerW / 2,
-        cm[1] + playerH / 2,
-        am[0] + playerW / 2,
-        am[1] + playerH / 2,
-        {
-          label: { text: 'pass', at: 'middle' }
-        }
-      ),
-      arrow(am[0] + playerW / 2, am[1] + playerH / 2, am[0] + playerW / 2, am[1] - 60)
+      connector(cm[0] + playerW / 2, cm[1], am[0] + playerW / 2, am[1] + playerH, {
+        label: { text: 'through', at: 'middle' }
+      })
+    )
+    // AM → forward (run)
+    items.push(arrow(am[0] + playerW / 2, am[1], am[0] + playerW / 2, am[1] - 60))
+    // LW → center (cross)
+    items.push(
+      connector(lw[0] + playerW, lw[1] + playerH / 2, 40 + pitchW / 2, lw[1] + playerH / 2, {
+        label: { text: 'cross', at: 'middle' }
+      })
+    )
+    // RW → center (cross)
+    items.push(
+      connector(rw[0], rw[1] + playerH / 2, 40 + pitchW / 2, rw[1] + playerH / 2, {
+        label: { text: 'cross', at: 'middle' }
+      })
     )
     return items
   }
@@ -214,24 +222,24 @@ const FOOTBALL: Template = {
 const BASKETBALL: Template = {
   id: 'basketball',
   name: 'Basketball half-court',
-  description: '5 players, court + 3pt arc, ready to draw a play',
+  description: '5 players + tactical arrows showing pick and roll',
   build: () => {
     const items: BoardScopedItem[] = []
-    // Court (wood tan).
+    // Court (wood tan — renders behind everything).
     items.push(rect(40, 40, 520, 360, { fill: '#fde68a' }))
     // Key (paint area).
     items.push(rect(40 + 520 / 2 - 80, 40 + 360 - 160, 160, 160, { fill: 'none' }))
-    // Free-throw circle (top of key).
+    // Free-throw circle.
     items.push({
       ...ellipse(40 + 520 / 2 - 50, 40 + 360 - 160 - 50, 100, 60, { fill: 'none' }),
       text: undefined
     })
-    // 3pt arc (approximated with an ellipse outline, top half).
+    // 3pt arc.
     items.push({
       ...ellipse(40 + 520 / 2 - 130, 40 + 360 - 280, 260, 280, { fill: 'none' }),
       text: undefined
     })
-    // Hoop line — bare line, no arrowhead (court marking).
+    // Hoop line.
     items.push(
       connector(40 + 520 / 2, 40 + 360 - 4, 40 + 520 / 2, 40 + 360 + 8, { arrowEnd: 'none' })
     )
@@ -248,6 +256,26 @@ const BASKETBALL: Template = {
     for (const [x, y, label] of labels) {
       items.push(ellipse(x, y, playerW, playerH, { text: label }))
     }
+    // Tactical arrows with labels.
+    const pg = labels[0]
+    const pf = labels[3]
+    const sg = labels[1]
+    // PG → PF (pass to post)
+    items.push(
+      connector(pg[0] + playerW / 2, pg[1] + playerH, pf[0] + playerW / 2, pf[1], {
+        label: { text: 'pass', at: 'middle' }
+      })
+    )
+    // PF → basket (roll to hoop)
+    items.push(
+      arrow(pf[0] + playerW / 2, pf[1] + playerH, pf[0] + playerW / 2, pf[1] + playerH + 60)
+    )
+    // SG → wing (kick out)
+    items.push(
+      connector(sg[0], sg[1] + playerH / 2, sg[0] - 60, sg[1] + playerH / 2, {
+        label: { text: 'kick out', at: 'middle' }
+      })
+    )
     return items
   }
 }
