@@ -272,16 +272,11 @@ export function AIModelModal({ open, onClose }: AIModelModalProps) {
         </div>
 
         {/* ── Right column: Config + Load status ────────────────── */}
-        <div className='flex-[4] space-y-4'>
-          {/* ── Config section ──────────────────────────────────── */}
+        <div className='flex-[4]'>
           <ConfigSection
             config={ai.config}
             disabled={isLoading}
             onChange={(next) => void ai.setConfig(next)}
-          />
-
-          {/* ── Load status / Selection bar ─────────────────────── */}
-          <SelectionBar
             model={selectedModel}
             isActive={isSelectedActive}
             isLoading={isSelectedLoading}
@@ -410,16 +405,17 @@ function ModelCard({
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Selection bar — explicit Load / Unload / Cancel
+// Config section (merged with load status)
 // ─────────────────────────────────────────────────────────────────────
 
-interface SelectionBarProps {
+interface ConfigSectionProps {
+  config: AiConfig
+  disabled: boolean
+  onChange: (next: AiConfig) => void
+  // Load status props
   model: ModelEntry | null
   isActive: boolean
   isLoading: boolean
-  // True between the click and the first progress event — the
-  // bridge roundtrip + render takes a tick and we don't want a stale
-  // clickable Load button in that gap.
   pending: boolean
   progress: ModelLoadProgress | null
   onLoad: () => void
@@ -427,7 +423,10 @@ interface SelectionBarProps {
   onCancel: () => void
 }
 
-function SelectionBar({
+function ConfigSection({
+  config,
+  disabled,
+  onChange,
   model,
   isActive,
   isLoading,
@@ -436,109 +435,7 @@ function SelectionBar({
   onLoad,
   onUnload,
   onCancel
-}: SelectionBarProps) {
-  if (!model) {
-    return (
-      <div className='rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-sm text-gray-500'>
-        Pick a model, then load it.
-      </div>
-    )
-  }
-
-  return (
-    <div className='rounded-lg border border-gray-200 bg-white p-4'>
-      <div className='flex items-start justify-between gap-3'>
-        <div className='min-w-0 flex-1'>
-          <div className='flex flex-wrap items-center gap-1.5'>
-            <span className='text-sm font-medium text-gray-800'>{model.name}</span>
-            {isActive && !isLoading && !pending && (
-              <span className='rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-700'>
-                Loaded
-              </span>
-            )}
-            {isLoading && (
-              <span className='rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700'>
-                {progress?.phase ?? 'loading'}
-              </span>
-            )}
-            {pending && !isLoading && (
-              <span className='rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-600'>
-                downloading
-              </span>
-            )}
-          </div>
-          {isLoading && progress && (
-            <div className='mt-2'>
-              <div className='h-2 w-full overflow-hidden rounded-full bg-gray-200'>
-                <div
-                  className='h-full rounded-full bg-tamarind-600 transition-all'
-                  style={{ width: `${Math.round(progress.percentage)}%` }}
-                />
-              </div>
-              <p className='mt-1 text-[10px] text-gray-500'>
-                {progress.phase === 'downloading'
-                  ? `Downloading… ${Math.round(progress.percentage)}%`
-                  : `Loading into memory… ${Math.round(progress.percentage)}%`}
-              </p>
-            </div>
-          )}
-          {pending && !isLoading && <p className='mt-1 text-[10px] text-gray-500'>Starting…</p>}
-        </div>
-      </div>
-
-      {/* Action buttons */}
-      <div className='mt-3 flex items-center gap-2'>
-        {isLoading ? (
-          <button
-            type='button'
-            onClick={onCancel}
-            className='rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
-          >
-            Cancel
-          </button>
-        ) : pending ? (
-          <button
-            type='button'
-            disabled
-            aria-busy='true'
-            className='inline-flex cursor-not-allowed items-center gap-1.5 rounded-md bg-tamarind-700 px-4 py-1.5 text-sm font-medium text-white opacity-60'
-          >
-            Starting…
-          </button>
-        ) : isActive ? (
-          <button
-            type='button'
-            onClick={onUnload}
-            className='rounded-md border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
-          >
-            Unload
-          </button>
-        ) : (
-          <button
-            type='button'
-            onClick={onLoad}
-            className='inline-flex items-center gap-1.5 rounded-md bg-tamarind-700 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-tamarind-800 focus:outline-none focus:ring-2 focus:ring-blue-500'
-          >
-            <Download className='h-4 w-4' aria-hidden='true' />
-            Load
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Config section
-// ─────────────────────────────────────────────────────────────────────
-
-interface ConfigSectionProps {
-  config: AiConfig
-  disabled: boolean
-  onChange: (next: AiConfig) => void
-}
-
-function ConfigSection({ config, disabled, onChange }: ConfigSectionProps) {
+}: ConfigSectionProps) {
   return (
     <section className='rounded-lg border border-gray-200 bg-gray-50 p-4'>
       <h3 className='mb-3 text-sm font-semibold text-gray-700'>Model configuration</h3>
@@ -603,6 +500,93 @@ function ConfigSection({ config, disabled, onChange }: ConfigSectionProps) {
             workloads.
           </span>
         </div>
+      </div>
+
+      {/* ── Load status ──────────────────────────────────────────── */}
+      <div className='mt-4 border-t border-gray-200 pt-4'>
+        {model ? (
+          <>
+            <div className='flex items-start justify-between gap-3'>
+              <div className='min-w-0 flex-1'>
+                <div className='flex flex-wrap items-center gap-1.5'>
+                  <span className='text-sm font-medium text-gray-800'>{model.name}</span>
+                  {isActive && !isLoading && !pending && (
+                    <span className='rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-700'>
+                      Loaded
+                    </span>
+                  )}
+                  {isLoading && (
+                    <span className='rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700'>
+                      {progress?.phase ?? 'loading'}
+                    </span>
+                  )}
+                  {pending && !isLoading && (
+                    <span className='rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-600'>
+                      downloading
+                    </span>
+                  )}
+                </div>
+                {isLoading && progress && (
+                  <div className='mt-2'>
+                    <div className='h-2 w-full overflow-hidden rounded-full bg-gray-200'>
+                      <div
+                        className='h-full rounded-full bg-tamarind-600 transition-all'
+                        style={{ width: `${Math.round(progress.percentage)}%` }}
+                      />
+                    </div>
+                    <p className='mt-1 text-[10px] text-gray-500'>
+                      {progress.phase === 'downloading'
+                        ? `Downloading… ${Math.round(progress.percentage)}%`
+                        : `Loading into memory… ${Math.round(progress.percentage)}%`}
+                    </p>
+                  </div>
+                )}
+                {pending && !isLoading && (
+                  <p className='mt-1 text-[10px] text-gray-500'>Starting…</p>
+                )}
+              </div>
+            </div>
+            <div className='mt-3 flex items-center gap-2'>
+              {isLoading ? (
+                <button
+                  type='button'
+                  onClick={onCancel}
+                  className='rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
+                >
+                  Cancel
+                </button>
+              ) : pending ? (
+                <button
+                  type='button'
+                  disabled
+                  aria-busy='true'
+                  className='inline-flex cursor-not-allowed items-center gap-1.5 rounded-md bg-tamarind-700 px-4 py-1.5 text-sm font-medium text-white opacity-60'
+                >
+                  Starting…
+                </button>
+              ) : isActive ? (
+                <button
+                  type='button'
+                  onClick={onUnload}
+                  className='rounded-md border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
+                >
+                  Unload
+                </button>
+              ) : (
+                <button
+                  type='button'
+                  onClick={onLoad}
+                  className='inline-flex items-center gap-1.5 rounded-md bg-tamarind-700 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-tamarind-800 focus:outline-none focus:ring-2 focus:ring-blue-500'
+                >
+                  <Download className='h-4 w-4' aria-hidden='true' />
+                  Load
+                </button>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className='text-center text-sm text-gray-500'>Pick a model, then load it.</div>
+        )}
       </div>
     </section>
   )
