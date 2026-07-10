@@ -33,6 +33,7 @@ export function AIModelModal({ open, onClose }: AIModelModalProps) {
   const isLoading = ai.progress !== null
 
   const [showAdd, setShowAdd] = useState(false)
+  const [activeTab, setActiveTab] = useState<'registry' | 'custom'>('registry')
   // Local "selected" id — clicking a model card only updates this. The
   // Load button in the right column is the only thing that fires
   // bridge.models.select(). Cleared after Unload so the picker lands
@@ -166,69 +167,106 @@ export function AIModelModal({ open, onClose }: AIModelModalProps) {
               load (so progress is visible) or after Switch. */}
           {showPicker && (
             <>
-              {/* ── QVAC Registry ─────────────────────────────── */}
-              <section>
-                <h3 className='mb-2.5 text-sm font-semibold text-gray-700'>QVAC Registry</h3>
-                {grouped.builtins.length === 0 ? (
-                  <p className='text-sm text-gray-500'>No recommended models registered.</p>
-                ) : (
-                  <div className='grid grid-cols-2 gap-2.5'>
-                    {grouped.builtins.map((m) => (
-                      <ModelCard
-                        key={m.id}
-                        model={m}
-                        isSelected={selectedId === m.id}
-                        isActive={ai.activeModel?.id === m.id}
-                        isLoading={isLoading && ai.activeModel?.id === m.id}
-                        progress={isLoading && ai.activeModel?.id === m.id ? ai.progress : null}
-                        onSelect={() => setSelectedId(m.id)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
+              {/* ── Tabs ────────────────────────────────────────── */}
+              <div
+                role='tablist'
+                aria-label='Model source'
+                className='inline-flex overflow-hidden rounded-lg border border-gray-200 bg-white'
+              >
+                <button
+                  type='button'
+                  role='tab'
+                  aria-selected={activeTab === 'registry'}
+                  onClick={() => setActiveTab('registry')}
+                  className={
+                    activeTab === 'registry'
+                      ? 'bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800'
+                      : 'border-r border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50'
+                  }
+                >
+                  QVAC Registry
+                </button>
+                <button
+                  type='button'
+                  role='tab'
+                  aria-selected={activeTab === 'custom'}
+                  onClick={() => setActiveTab('custom')}
+                  className={
+                    activeTab === 'custom'
+                      ? 'bg-gray-100 px-4 py-2 text-sm font-medium text-gray-800'
+                      : 'px-4 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50'
+                  }
+                >
+                  Custom
+                </button>
+              </div>
 
-              {/* ── Custom models ──────────────────────────────── */}
-              <section>
-                <h3 className='mb-2.5 text-sm font-semibold text-gray-700'>Custom</h3>
-                {grouped.customs.length === 0 ? (
-                  <p className='text-sm text-gray-500'>No custom models added yet.</p>
-                ) : (
-                  <div className='grid grid-cols-2 gap-2.5'>
-                    {grouped.customs.map((m) => (
-                      <ModelCard
-                        key={m.id}
-                        model={m}
-                        isSelected={selectedId === m.id}
-                        isActive={ai.activeModel?.id === m.id}
-                        isLoading={isLoading && ai.activeModel?.id === m.id}
-                        progress={isLoading && ai.activeModel?.id === m.id ? ai.progress : null}
-                        onSelect={() => setSelectedId(m.id)}
-                        onRemove={() => void handleRemove(m.id)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
+              {/* ── Tab content ──────────────────────────────────── */}
+              {activeTab === 'registry' && (
+                <section>
+                  {grouped.builtins.length === 0 ? (
+                    <p className='text-sm text-gray-500'>No recommended models registered.</p>
+                  ) : (
+                    <div className='grid grid-cols-2 gap-2.5'>
+                      {grouped.builtins.map((m) => (
+                        <ModelCard
+                          key={m.id}
+                          model={m}
+                          isSelected={selectedId === m.id}
+                          isActive={ai.activeModel?.id === m.id}
+                          isLoading={isLoading && ai.activeModel?.id === m.id}
+                          progress={isLoading && ai.activeModel?.id === m.id ? ai.progress : null}
+                          onSelect={() => setSelectedId(m.id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
 
-              {/* ── Add custom ─────────────────────────────────── */}
-              <section>
-                {!showAdd ? (
-                  <button
-                    type='button'
-                    onClick={() => setShowAdd(true)}
-                    className='inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-300 px-3 text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
-                  >
-                    <Plus className='h-4 w-4' aria-hidden='true' />
-                    Add custom model
-                  </button>
-                ) : (
-                  <AddCustomModelForm
-                    onComplete={(e) => void handleAdd(e)}
-                    onCancel={() => setShowAdd(false)}
-                  />
-                )}
-              </section>
+              {activeTab === 'custom' && (
+                <>
+                  <section>
+                    {grouped.customs.length === 0 ? (
+                      <p className='text-sm text-gray-500'>No custom models added yet.</p>
+                    ) : (
+                      <div className='grid grid-cols-2 gap-2.5'>
+                        {grouped.customs.map((m) => (
+                          <ModelCard
+                            key={m.id}
+                            model={m}
+                            isSelected={selectedId === m.id}
+                            isActive={ai.activeModel?.id === m.id}
+                            isLoading={isLoading && ai.activeModel?.id === m.id}
+                            progress={isLoading && ai.activeModel?.id === m.id ? ai.progress : null}
+                            onSelect={() => setSelectedId(m.id)}
+                            onRemove={() => void handleRemove(m.id)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </section>
+
+                  {/* ── Add custom ─────────────────────────────────── */}
+                  <section>
+                    {!showAdd ? (
+                      <button
+                        type='button'
+                        onClick={() => setShowAdd(true)}
+                        className='inline-flex h-9 items-center gap-1.5 rounded-md border border-gray-300 px-3 text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
+                      >
+                        <Plus className='h-4 w-4' aria-hidden='true' />
+                        Add custom model
+                      </button>
+                    ) : (
+                      <AddCustomModelForm
+                        onComplete={(e) => void handleAdd(e)}
+                        onCancel={() => setShowAdd(false)}
+                      />
+                    )}
+                  </section>
+                </>
+              )}
             </>
           )}
         </div>
@@ -287,7 +325,7 @@ function ModelCard({
     <div
       className={
         isSelected
-          ? 'relative flex flex-col rounded-lg border-2 border-tamarind-600 bg-tamarind-50 p-3 transition'
+          ? 'relative flex flex-col rounded-lg border-2 border-gray-400 bg-gray-100 p-3 transition'
           : 'relative flex flex-col rounded-lg border border-gray-200 bg-white p-3 transition hover:border-gray-300 hover:bg-gray-50'
       }
     >
@@ -303,7 +341,7 @@ function ModelCard({
             aria-hidden='true'
             className={
               isSelected
-                ? 'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 border-tamarind-700 bg-tamarind-700'
+                ? 'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 border-gray-600 bg-gray-600'
                 : 'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2 border-gray-300 bg-white'
             }
           >
