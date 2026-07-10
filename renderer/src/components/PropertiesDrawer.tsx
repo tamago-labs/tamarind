@@ -389,9 +389,10 @@ function TextSection({
             e.currentTarget.blur()
           }
         }}
+        placeholder='Add text here...'
         aria-label='Shape text'
         rows={4}
-        className='mb-2 w-full resize-none rounded-md border border-gray-200 bg-white p-2 text-xs text-gray-800 focus:border-tamarind-500 focus:outline-none'
+        className='mb-2 w-full resize-none rounded-md border border-gray-200 bg-white p-2 text-xs text-gray-800 placeholder:text-gray-400 focus:border-tamarind-500 focus:outline-none'
       />
       <Field label='Font size'>
         <input

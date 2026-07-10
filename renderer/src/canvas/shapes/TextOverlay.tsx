@@ -111,13 +111,10 @@ export function TextOverlay({ item, width, height, onUpdate }: TextOverlayProps)
             overflow: 'hidden',
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
-            cursor: 'text',
-            // Only show pointer cursor when text is present so empty
-            // shapes don't suggest an editor.
-            opacity: item.text ? 1 : 0.4
+            cursor: 'text'
           }}
         >
-          {item.text || 'Double-click to edit'}
+          {item.text}
         </div>
       )}
     </foreignObject>

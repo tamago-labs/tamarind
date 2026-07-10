@@ -512,7 +512,7 @@ export function CanvasPage() {
             fill: DEFAULT_FILL,
             stroke: DEFAULT_STROKE,
             strokeWidth: DEFAULT_STROKE_WIDTH,
-            text: DEFAULT_NOTE_TEXT,
+            text: '',
             fontSize: DEFAULT_NOTE_FONT_SIZE,
             order: 0,
             updatedAt: now
