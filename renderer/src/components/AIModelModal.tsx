@@ -135,7 +135,7 @@ export function AIModelModal({ open, onClose }: AIModelModalProps) {
       subtitle='Set up AI so your team can refine plans and automation.'
       variant='canvas'
       busy={isLoading}
-      className='max-w-3xl'
+      className='h-[80vh] w-[80vw] max-w-none'
     >
       <div className='mt-4 flex gap-5'>
         {/* ── Left column: Model lists ─────────────────────────── */}

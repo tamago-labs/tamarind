@@ -104,7 +104,7 @@ export function BaseModal({
             exit={{ opacity: 0, scale: 0.96, y: 4 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
             onClick={(e) => e.stopPropagation()}
-            className={`w-full max-w-md rounded-lg border p-6 shadow-2xl ${variantClass} ${className}`}
+            className={`flex h-full w-full flex-col rounded-lg border p-6 shadow-2xl ${variantClass} ${className}`}
           >
             <div className='flex items-start justify-between gap-4'>
               <div className='flex min-w-0 flex-1 flex-col gap-0.5'>
@@ -127,7 +127,7 @@ export function BaseModal({
 
             {hint && <p className='mt-2 text-sm'>{hint}</p>}
 
-            <div className='mt-4 max-h-[calc(100vh-16rem)] overflow-y-auto pr-1'>{children}</div>
+            <div className='mt-4 flex-1 overflow-y-auto pr-1'>{children}</div>
 
             {footer && <div className='mt-5 flex items-center justify-end gap-2'>{footer}</div>}
           </motion.div>
