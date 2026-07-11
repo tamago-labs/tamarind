@@ -153,7 +153,7 @@ export const CANVAS_TOOLS: ToolDefinition[] = [
     name: 'update_items',
     description:
       'Update properties of existing items by their id. ' +
-      'Pass the id and a patch object with the fields to change.',
+      'The field for text/label content is called "text" (not "label").',
     parameters: {
       type: 'object',
       properties: {
@@ -169,7 +169,8 @@ export const CANVAS_TOOLS: ToolDefinition[] = [
               },
               patch: {
                 type: 'object',
-                description: 'Fields to update (text, x, y, fill, stroke, etc.)'
+                description:
+                  'Fields to update: text (string), x (number), y (number), fill (hex color), stroke (hex color)'
               }
             },
             required: ['id', 'patch']

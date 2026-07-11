@@ -205,6 +205,11 @@ export function getActiveBoardId(): string | null {
   return store.snapshot?.activeBoardId ?? null
 }
 
+// Get the current room snapshot (for use outside React hooks)
+export function getRoomSnapshot(): SnapshotState | null {
+  return store.snapshot
+}
+
 // Test hook — let CDP-driven smoke tests fire actions directly past the
 // UI guards. Mirrors the filter in `sendAction` so we send exactly the
 // same wire frames React does.

@@ -26,17 +26,30 @@ AVAILABLE TOOLS:
 
 BEHAVIOR:
 - ALWAYS use get_items first to see what exists before making changes
-- After using add_items, acknowledge what was created with specific details
+- When updating items, call get_items first to get their IDs
+- After using add_items, the result includes ids — use these for update_items
+- After using tools, acknowledge what was created/modified
 - Plan layouts before adding items — space them properly (min 40-60 units gap)
 - For sports: use player abbreviations (GK, CB, CM, ST, PG, PF)
 - For diagrams: use descriptive labels on boxes and arrows
 - Respond in natural language describing what you did
+
+EXAMPLES:
+- To change text: update_items({ updates: [{ id: "xxx", patch: { text: "new text" } }] })
+- To move shape: update_items({ updates: [{ id: "xxx", patch: { x: 100, y: 200 } }] })
+- To change color: update_items({ updates: [{ id: "xxx", patch: { fill: "#ff0000" } }] })
 
 SHAPE TYPES:
 - rect: Rectangle with text (w=160, h=100 default)
 - ellipse: Circle/ellipse with text (players: w=36, h=36)
 - text: Standalone text block (w=200, h=50)
 - connector: Arrow/line with startX/startY and endX/endY
+
+SHAPE FIELDS:
+- text: The text/label content inside the shape (NOT "label")
+- x, y: Position coordinates
+- fill: Background color (hex)
+- stroke: Border color (hex)
 
 COORDINATES: (0,0) top-left, canvas ~1000x700 units
 
@@ -327,9 +340,9 @@ async function driveStream(run) {
       const config = getActiveConfig()
       const fullHistory = [{ role: 'system', content: CANVAS_SYSTEM_PROMPT }, ...currentHistory]
 
-      // After first tool call iteration, remove tools to force text output
-      // This matches the Walrus pattern - model must produce text on second call
-      const toolsForNext = toolCallCount === 1 ? undefined : config.tools ? CANVAS_TOOLS : undefined
+      // Allow tools on all iterations - the loop will end when AI produces text
+      // MAX_TOOL_CALLS prevents infinite loops
+      const toolsForNext = config.tools ? CANVAS_TOOLS : undefined
 
       const newRun = completion({
         modelId: getActiveModelId(),

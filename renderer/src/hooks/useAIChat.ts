@@ -31,7 +31,8 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { bridge } from '../lib/bridge'
 import { uid } from '../canvas/id'
-import { getActiveBoardId } from './useRoom'
+import { getActiveBoardId, getRoomSnapshot } from './useRoom'
+import { writeRoom } from '../lib/room'
 import type {
   AiSource,
   ChatDoneEvent,
@@ -153,17 +154,28 @@ async function handleToolCall(
 
     if (name === 'get_items') {
       // Return current items from the room snapshot
-      // The snapshot is available via useRoom, but we need to access it
-      // from the store. For now, return empty — the AI will work with
-      // whatever it creates.
-      result = { success: true, items: [], count: 0 }
+      const snapshot = getRoomSnapshot()
+      const activeBoardId = getActiveBoardId()
+      const items =
+        snapshot?.items?.filter((i: Record<string, unknown>) => i.boardId === activeBoardId) ?? []
+      result = {
+        success: true,
+        count: items.length,
+        items: items.map((i: Record<string, unknown>) => ({
+          id: i.id,
+          type: i.type,
+          text: i.text || '',
+          x: Math.round(i.x as number),
+          y: Math.round(i.y as number)
+        })),
+        hint: 'Use the "id" field (hex string) when calling update_items'
+      }
     } else if (name === 'add_items') {
       // Execute add-items against the canvas worker
       // AI sends partial items — fill in required fields with defaults
       const rawItems = args.items as Array<Record<string, unknown>>
       if (Array.isArray(rawItems) && rawItems.length > 0) {
         const now = Date.now()
-        const { writeRoom } = await import('../lib/room')
         const activeBoardId = getActiveBoardId() ?? ''
         const items = rawItems.map((raw) => {
           const type = String(raw.type ?? 'rect')
@@ -213,17 +225,20 @@ async function handleToolCall(
         result = {
           success: true,
           count: items.length,
-          message: `Successfully added ${items.length} shape(s) to the canvas`,
-          shapes: items.map(
-            (i) => `${i.type} at (${i.x},${i.y})${i.text ? ` with text "${i.text}"` : ''}`
-          )
+          items: items.map((i) => ({
+            id: i.id,
+            type: i.type,
+            text: i.text || ''
+          })),
+          message: `Added ${items.length} shape(s). Use the "id" field to update.`
         }
       }
     } else if (name === 'update_items') {
       const updates = args.updates as Array<{ id: string; patch: Record<string, unknown> }>
+      console.log('[useAIChat] update_items received:', JSON.stringify(updates))
       if (Array.isArray(updates)) {
-        const { writeRoom } = await import('../lib/room')
         for (const update of updates) {
+          console.log('[useAIChat] update-item patch:', JSON.stringify(update.patch))
           await writeRoom({
             type: 'state-action',
             action: {
@@ -243,7 +258,6 @@ async function handleToolCall(
     } else if (name === 'remove_items') {
       const ids = args.ids as string[]
       if (Array.isArray(ids)) {
-        const { writeRoom } = await import('../lib/room')
         await writeRoom({
           type: 'state-action',
           action: { type: 'remove-items', ids }
