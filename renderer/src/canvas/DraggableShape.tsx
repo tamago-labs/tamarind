@@ -16,11 +16,12 @@
 import { useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { BoardScopedItem, ResizeHandle } from './types'
-import { isConnector, isResizable } from './types'
-import { RectShape } from './shapes/RectShape'
+import { isResizable, isConnector } from './types'
 import { EllipseShape } from './shapes/EllipseShape'
-import { ConnectorShape } from './shapes/ConnectorShape'
+import { RectShape } from './shapes/RectShape'
 import { TextShape } from './shapes/TextShape'
+import { NoteShape } from './shapes/NoteShape'
+import { ConnectorShape } from './shapes/ConnectorShape'
 import { SelectionOverlay } from './SelectionOverlay'
 import { ResizeHandles } from './ResizeHandles'
 import { ConnectorHandles } from './ConnectorHandles'
@@ -66,6 +67,10 @@ function ShapeForItem({
       return <ConnectorShape item={item} itemsById={itemsById} />
     case 'text':
       return <TextShape item={item} onUpdate={onUpdate} />
+    case 'note':
+      return (
+        <NoteShape item={item} width={item.w ?? 120} height={item.h ?? 80} onUpdate={onUpdate} />
+      )
   }
 }
 

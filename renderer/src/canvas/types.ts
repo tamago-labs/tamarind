@@ -3,7 +3,7 @@
 // only the storage layer changes. Phase 3 will mirror this union into
 // a hyperschema/hyperdb/hyperdispatch spec.
 
-export type GenericShapeType = 'rect' | 'ellipse' | 'connector' | 'text'
+export type GenericShapeType = 'rect' | 'ellipse' | 'connector' | 'text' | 'note'
 export type ShapeType = GenericShapeType
 
 // ── Boards ───────────────────────────────────────────────────────
@@ -61,6 +61,17 @@ export interface TextItem extends ShapeBase {
   type: 'text'
   w: number
   h: number
+  text?: string
+  fontSize?: number
+}
+
+// Sticky note with folded corner effect. Yellow default, always has text.
+// Used for tactical planning notes, reminders, and annotations.
+export interface NoteItem extends ShapeBase {
+  type: 'note'
+  w: number
+  h: number
+  fill?: string
   text?: string
   fontSize?: number
 }
@@ -155,7 +166,9 @@ export const DEFAULT_FILL = '#ffffff'
 export const SELECT_STROKE = '#3b82f6' // tailwind blue-500; matches the marquee overlay
 
 export const DEFAULT_SHAPE_SIZE = { w: 160, h: 100 }
-export const DEFAULT_NOTE_TEXT = 'Double-click to edit'
+export const DEFAULT_NOTE_SIZE = { w: 120, h: 80 }
+export const DEFAULT_NOTE_FILL = '#fef3c7'
+export const DEFAULT_NOTE_TEXT = ''
 export const DEFAULT_NOTE_FONT_SIZE = 12
 export const DEFAULT_TEXT_SIZE = { w: 220, h: 60 }
 // Text shapes usually hold titles/labels, so start at a larger readable size.
@@ -167,7 +180,7 @@ export type ResizeHandle = 'nw' | 'ne' | 'sw' | 'se'
 export type LineCap = 'round' | 'butt' | 'square'
 
 export function isResizable(type: ShapeType): boolean {
-  return type === 'rect' || type === 'ellipse' || type === 'text'
+  return type === 'rect' || type === 'ellipse' || type === 'text' || type === 'note'
 }
 
 export function isConnector(type: ShapeType): boolean {

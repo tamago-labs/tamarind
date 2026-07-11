@@ -67,9 +67,10 @@ export const CANVAS_TOOLS: ToolDefinition[] = [
     type: 'function',
     name: 'add_items',
     description:
-      'Add shapes to the canvas. Supports rect, ellipse, text, and connector types. ' +
+      'Add shapes to the canvas. Supports rect, ellipse, text, connector, and note types. ' +
       'Use coordinates (x, y) for position, w/h for size, text for labels, fill/stroke for colors. ' +
-      'For connectors, use startX/startY and endX/endY endpoints with an optional label.',
+      'For connectors, use startX/startY and endX/endY endpoints with an optional label. ' +
+      'Notes are sticky notes with folded corners (yellow default).',
     parameters: {
       type: 'object',
       properties: {
@@ -81,7 +82,7 @@ export const CANVAS_TOOLS: ToolDefinition[] = [
             properties: {
               type: {
                 type: 'string',
-                enum: ['rect', 'ellipse', 'text', 'connector'],
+                enum: ['rect', 'ellipse', 'text', 'connector', 'note'],
                 description: 'Shape type'
               },
               x: {

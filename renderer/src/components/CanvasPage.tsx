@@ -563,6 +563,24 @@ export function CanvasPage() {
             updatedAt: now
           }
           break
+        case 'note':
+          item = {
+            id,
+            boardId: state.activeBoardId,
+            type,
+            x,
+            y,
+            w: 120,
+            h: 80,
+            fill: '#fef3c7',
+            stroke: DEFAULT_STROKE,
+            strokeWidth: DEFAULT_STROKE_WIDTH,
+            text: '',
+            fontSize: DEFAULT_NOTE_FONT_SIZE,
+            order: 0,
+            updatedAt: now
+          }
+          break
       }
       // `order` is overridden by the reducer; the placeholder keeps
       // the type-checker happy until the reducer assigns it.
