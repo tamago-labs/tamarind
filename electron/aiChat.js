@@ -341,9 +341,9 @@ async function driveStream(run) {
       const config = getActiveConfig()
       const fullHistory = [{ role: 'system', content: CANVAS_SYSTEM_PROMPT }, ...currentHistory]
 
-      // Allow tools on all iterations - the loop will end when AI produces text
-      // MAX_TOOL_CALLS prevents infinite loops
-      const toolsForNext = config.tools ? CANVAS_TOOLS : undefined
+      // After first tool call iteration, disable tools to force text output
+      // This prevents the AI from creating items in a loop
+      const toolsForNext = toolCallCount >= 1 ? undefined : config.tools ? CANVAS_TOOLS : undefined
 
       const newRun = completion({
         modelId: getActiveModelId(),

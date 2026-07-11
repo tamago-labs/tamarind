@@ -74,6 +74,9 @@ const initialState: RoomState = {
 const store: RoomState & { version: number } = { ...initialState, version: 0 }
 const listeners = new Set<() => void>()
 
+// Track active board ID separately from snapshot (snapshot doesn't track it)
+let trackedActiveBoardId: string | null = null
+
 let startPromise: Promise<boolean> | null = null
 let unsubscribe: (() => void) | null = null
 
@@ -202,7 +205,12 @@ const getSnapshot = () => store.version
 
 // Get the active board ID from the room store (for use outside React hooks)
 export function getActiveBoardId(): string | null {
-  return store.snapshot?.activeBoardId ?? null
+  return trackedActiveBoardId ?? store.snapshot?.activeBoardId ?? null
+}
+
+// Set the active board ID tracker (called when user switches boards)
+export function setActiveBoardTracker(id: string | null): void {
+  trackedActiveBoardId = id
 }
 
 // Get the current room snapshot (for use outside React hooks)

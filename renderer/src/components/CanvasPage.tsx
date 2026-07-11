@@ -19,7 +19,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
-import { useRoom } from '../hooks/useRoom'
+import { useRoom, setActiveBoardTracker } from '../hooks/useRoom'
 import { canvasReducer } from '../canvas/canvasReducer'
 import type { Action, CanvasState } from '../canvas/canvasReducer'
 import { withHistory, type HistoryState } from '../canvas/history'
@@ -877,6 +877,8 @@ export function CanvasPage() {
     (id: string) => {
       dispatchAction({ type: 'set-active', id })
       setSelectedIds(new Set())
+      // Update the tracker so AI tools see the correct active board
+      setActiveBoardTracker(id)
     },
     [dispatchAction]
   )
