@@ -280,18 +280,30 @@ export function AIChatTab(_props: AIChatTabProps) {
                     <span className='text-xs font-medium text-gray-700'>Prompt-to-Canvas</span>
                     <button
                       type='button'
+                      disabled={chat.aiSource?.kind === 'peer'}
                       onClick={() => ai.setConfig({ ...ai.config, tools: !ai.config.tools })}
                       className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
-                        ai.config.tools ? 'bg-blue-600' : 'bg-gray-300'
+                        chat.aiSource?.kind === 'peer'
+                          ? 'cursor-not-allowed opacity-50 bg-gray-200'
+                          : ai.config.tools
+                            ? 'bg-blue-600'
+                            : 'bg-gray-300'
                       }`}
                     >
                       <span
                         className={`inline-block h-4 w-4 rounded-full bg-white shadow transition ${
-                          ai.config.tools ? 'translate-x-4' : 'translate-x-0.5'
+                          ai.config.tools && chat.aiSource?.kind !== 'peer'
+                            ? 'translate-x-4'
+                            : 'translate-x-0.5'
                         }`}
                       />
                     </button>
                   </div>
+                  {chat.aiSource?.kind === 'peer' && (
+                    <p className='mt-1 text-[10px] text-amber-600'>
+                      ⚠️ Prompt-to-canvas requires local AI source
+                    </p>
+                  )}
                 </div>
 
                 {/* Tool toggles */}
