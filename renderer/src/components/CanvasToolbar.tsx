@@ -337,6 +337,9 @@ export function CanvasToolbar({
         <ShapeButton label='Add ellipse' onClick={() => onAddShape('ellipse')}>
           <Circle className='h-4 w-4' aria-hidden='true' />
         </ShapeButton>
+        <ShapeButton label='Add sticky note' onClick={() => onAddShape('note')}>
+          <StickyNote className='h-4 w-4' aria-hidden='true' />
+        </ShapeButton>
         <ShapeButton
           label='Add connector'
           active={selectedTool === 'connector'}
@@ -346,9 +349,6 @@ export function CanvasToolbar({
         </ShapeButton>
         <ShapeButton label='Add text' onClick={() => onAddShape('text')}>
           <Type className='h-4 w-4' aria-hidden='true' />
-        </ShapeButton>
-        <ShapeButton label='Add sticky note' onClick={() => onAddShape('note')}>
-          <StickyNote className='h-4 w-4' aria-hidden='true' />
         </ShapeButton>
 
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />

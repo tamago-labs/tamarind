@@ -434,9 +434,9 @@ function ConfigSection({
 }: ConfigSectionProps) {
   return (
     <section className='rounded-lg border border-gray-200 bg-gray-50 p-4'>
-      <h3 className='mb-3 text-sm font-semibold text-gray-700'>Model configuration</h3>
-      <div className='space-y-3'>
-        <label className='flex flex-col gap-1.5'>
+      <h3 className='mb-3 text-sm font-semibold text-gray-700'>Control Panel</h3>
+      <div className='mb-4 flex gap-4'>
+        <label className='flex flex-1 flex-col gap-1.5'>
           <span className='text-xs font-medium text-gray-600'>Context size</span>
           <select
             value={config.ctx_size}
@@ -453,15 +453,13 @@ function ConfigSection({
             {CTX_SIZE_OPTIONS.map((n) => (
               <option key={n} value={n}>
                 {n}
-                {n === 4096 ? ' (default)' : ''}
+                {n === 8192 ? ' (default)' : ''}
               </option>
             ))}
           </select>
-          <span className='text-[10px] text-gray-500'>
-            Lower uses less memory; higher keeps longer conversations in one call.
-          </span>
+          <span className='text-[10px] text-gray-500'>Lower uses less memory.</span>
         </label>
-        <div className='flex flex-col gap-1.5'>
+        <div className='flex flex-1 flex-col gap-1.5'>
           <span className='text-xs font-medium text-gray-600'>Tools</span>
           <div
             role='radiogroup'
@@ -492,99 +490,93 @@ function ConfigSection({
             ))}
           </div>
           <span className='text-[10px] text-gray-500'>
-            Allow the model to call tools (function-calling). Disable for simpler chat-only
-            workloads.
+            Disable for simpler chat-only workloads.
           </span>
         </div>
       </div>
 
       {/* ── Load status ──────────────────────────────────────────── */}
-      <div className='mt-4 border-t border-gray-200 pt-4'>
-        <h3 className='mb-3 text-sm font-semibold text-gray-700'>Selected Model</h3>
-        {model ? (
-          <>
-            <div className='flex items-start justify-between gap-3'>
-              <div className='min-w-0 flex-1'>
-                <div className='flex flex-wrap items-center gap-1.5'>
-                  <span className='text-sm font-medium text-gray-800'>{model.name}</span>
-                  {isActive && !isLoading && !pending && (
-                    <span className='rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-700'>
-                      Loaded
-                    </span>
-                  )}
-                  {isLoading && (
-                    <span className='rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700'>
-                      {progress?.phase ?? 'loading'}
-                    </span>
-                  )}
-                  {pending && !isLoading && (
-                    <span className='rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-600'>
-                      downloading
-                    </span>
-                  )}
-                </div>
-                {isLoading && progress && (
-                  <div className='mt-2'>
-                    <div className='h-2 w-full overflow-hidden rounded-full bg-gray-200'>
-                      <div
-                        className='h-full rounded-full bg-tamarind-600 transition-all'
-                        style={{ width: `${Math.round(progress.percentage)}%` }}
-                      />
-                    </div>
-                    <p className='mt-1 text-[10px] text-gray-500'>
-                      {progress.phase === 'downloading'
-                        ? `Downloading… ${Math.round(progress.percentage)}%`
-                        : `Loading into memory… ${Math.round(progress.percentage)}%`}
-                    </p>
-                  </div>
+      {model ? (
+        <>
+          <div className='flex items-start justify-between gap-3'>
+            <div className='min-w-0 flex-1'>
+              <div className='flex flex-wrap items-center gap-1.5'>
+                <span className='text-sm font-medium text-gray-800'>{model.name}</span>
+                {isActive && !isLoading && !pending && (
+                  <span className='rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-700'>
+                    Loaded
+                  </span>
+                )}
+                {isLoading && (
+                  <span className='rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700'>
+                    {progress?.phase ?? 'loading'}
+                  </span>
                 )}
                 {pending && !isLoading && (
-                  <p className='mt-1 text-[10px] text-gray-500'>Starting…</p>
+                  <span className='rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gray-600'>
+                    downloading
+                  </span>
                 )}
               </div>
-            </div>
-            <div className='mt-3 flex items-center gap-2'>
-              {isLoading ? (
-                <button
-                  type='button'
-                  onClick={onCancel}
-                  className='rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
-                >
-                  Cancel
-                </button>
-              ) : pending ? (
-                <button
-                  type='button'
-                  disabled
-                  aria-busy='true'
-                  className='inline-flex cursor-not-allowed items-center gap-1.5 rounded-md bg-tamarind-700 px-4 py-1.5 text-sm font-medium text-white opacity-60'
-                >
-                  Starting…
-                </button>
-              ) : isActive ? (
-                <button
-                  type='button'
-                  onClick={onUnload}
-                  className='rounded-md border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
-                >
-                  Unload
-                </button>
-              ) : (
-                <button
-                  type='button'
-                  onClick={onLoad}
-                  className='inline-flex items-center gap-1.5 rounded-md bg-tamarind-700 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-tamarind-800 focus:outline-none focus:ring-2 focus:ring-blue-500'
-                >
-                  <Download className='h-4 w-4' aria-hidden='true' />
-                  Load
-                </button>
+              {isLoading && progress && (
+                <div className='mt-2'>
+                  <div className='h-2 w-full overflow-hidden rounded-full bg-gray-200'>
+                    <div
+                      className='h-full rounded-full bg-tamarind-600 transition-all'
+                      style={{ width: `${Math.round(progress.percentage)}%` }}
+                    />
+                  </div>
+                  <p className='mt-1 text-[10px] text-gray-500'>
+                    {progress.phase === 'downloading'
+                      ? `Downloading… ${Math.round(progress.percentage)}%`
+                      : `Loading into memory… ${Math.round(progress.percentage)}%`}
+                  </p>
+                </div>
               )}
+              {pending && !isLoading && <p className='mt-1 text-[10px] text-gray-500'>Starting…</p>}
             </div>
-          </>
-        ) : (
-          <div className='text-center text-sm text-gray-500'>Pick a model, then load it.</div>
-        )}
-      </div>
+          </div>
+          <div className='mt-3 flex items-center gap-2'>
+            {isLoading ? (
+              <button
+                type='button'
+                onClick={onCancel}
+                className='rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
+              >
+                Cancel
+              </button>
+            ) : pending ? (
+              <button
+                type='button'
+                disabled
+                aria-busy='true'
+                className='inline-flex cursor-not-allowed items-center gap-1.5 rounded-md bg-tamarind-700 px-4 py-1.5 text-sm font-medium text-white opacity-60'
+              >
+                Starting…
+              </button>
+            ) : isActive ? (
+              <button
+                type='button'
+                onClick={onUnload}
+                className='rounded-md border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
+              >
+                Unload
+              </button>
+            ) : (
+              <button
+                type='button'
+                onClick={onLoad}
+                className='inline-flex items-center gap-1.5 rounded-md bg-tamarind-700 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-tamarind-800 focus:outline-none focus:ring-2 focus:ring-blue-500'
+              >
+                <Download className='h-4 w-4' aria-hidden='true' />
+                Load
+              </button>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className='text-center text-sm text-gray-500'>Pick a model, then load it.</div>
+      )}
     </section>
   )
 }

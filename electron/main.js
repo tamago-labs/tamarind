@@ -13,7 +13,8 @@ const {
   setStreamingNow,
   mapError,
   buildStatus,
-  resetCache
+  resetCache,
+  clearAllCache
 } = require('./qvac')
 const { modelStore } = require('./modelStore')
 const aiChat = require('./aiChat')
@@ -393,6 +394,7 @@ function registerModelsIpc() {
       // modelStore so the next launch picks up the same defaults.
       const config = modelStore.getAiConfig()
       setActiveConfig(config)
+      await clearAllCache()
       await ensureModel(entry)
       // Phase 7: broadcast the new AI state to peers via the worker.
       pushAiStateToRoomWorker()

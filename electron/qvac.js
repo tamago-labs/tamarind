@@ -29,6 +29,7 @@ const {
   unloadModel,
   downloadAsset,
   cancel,
+  deleteCache,
   ModelType,
   InferenceCancelledError,
   ContextOverflowError,
@@ -548,6 +549,14 @@ function buildStatus() {
   }
 }
 
+async function clearAllCache() {
+  try {
+    await deleteCache({ all: true })
+  } catch (err) {
+    console.error('[qvac] clearAllCache failed:', err)
+  }
+}
+
 module.exports = {
   ensureQvacConfig,
   setMainWindow,
@@ -563,5 +572,6 @@ module.exports = {
   buildStatus,
   findAndUnlinkCacheFile,
   resetCache,
+  clearAllCache,
   mapError
 }
