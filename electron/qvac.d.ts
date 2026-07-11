@@ -33,7 +33,7 @@ export interface ModelEntry {
 }
 
 export interface AiConfig {
-  ctx_size: 2048 | 4096 | 8192
+  ctx_size: 2048 | 4096 | 8192 | 16384
   tools: boolean
 }
 

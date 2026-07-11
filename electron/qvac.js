@@ -47,8 +47,13 @@ let currentLoadedAt = /** @type {number|null} */ (null)
 // Mirrored from modelStore.setAiConfig via setActiveConfig(). Module-scope
 // so ensureModel can read it on every load without threading it through
 // the IPC callbacks (matches TamaFlow's module-scope design).
-/** @type {{ ctx_size: 2048|4096|8192, tools: boolean }} */
-let activeConfig = { ctx_size: 4096, tools: false }
+/** @type {{ ctx_size: 2048|4096|8192|16384, tools: boolean }} */
+let activeConfig = { ctx_size: 8192, tools: false }
+
+/** Return the current active config (read-only copy). */
+function getActiveConfig() {
+  return { ...activeConfig }
+}
 
 /**
  * Map of `registry://<id>` source strings to the matching @qvac/sdk
@@ -330,6 +335,7 @@ async function loadRegistry(entry) {
   const modelSrc = resolveRegistrySource(entry.source)
   const op = loadModel({
     modelSrc,
+    modelConfig: buildModelConfig(),
     onProgress: (p) =>
       emitProgress('loading', {
         downloaded: p.downloaded,
@@ -546,6 +552,7 @@ module.exports = {
   ensureQvacConfig,
   setMainWindow,
   setActiveConfig,
+  getActiveConfig,
   ensureModel,
   cancelCurrentRequest,
   unloadCurrent,

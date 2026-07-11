@@ -445,7 +445,7 @@ function registerModelsIpc() {
   ipcMain.handle('ai-config:get', () => modelStore.getAiConfig())
   ipcMain.handle('ai-config:set', (_evt, config) => {
     const ctx = Number(config?.ctx_size)
-    if (![2048, 4096, 8192].includes(ctx)) {
+    if (![2048, 4096, 8192, 16384].includes(ctx)) {
       throw new Error(`Unsupported ctx_size: ${config?.ctx_size}`)
     }
     const tools = !!config?.tools
@@ -478,6 +478,19 @@ function registerChatIpc() {
   })
   ipcMain.handle('chat:cancel', () => aiChat.cancelMessage())
   ipcMain.handle('chat:status', () => aiChat.getStatus())
+
+  // Tool result response from renderer — used by canvasTools.js
+  // to forward tool execution results back to the AI completion.
+  const toolResultHandlers = new Map()
+  ipcMain.handle('chat:toolResult:response', (_evt, result) => {
+    // Store the result so canvasTools.js can retrieve it
+    const resolve = toolResultHandlers.get('current')
+    if (resolve) {
+      toolResultHandlers.delete('current')
+      resolve(result)
+    }
+    return { success: true }
+  })
 
   // Phase 8: route a chat completion to a peer's loaded model over
   // the Autobase. `args.targetWriterKey` is the z32-encoded writer

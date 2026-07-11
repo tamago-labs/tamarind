@@ -200,6 +200,11 @@ const subscribe = (cb: () => void) => {
 }
 const getSnapshot = () => store.version
 
+// Get the active board ID from the room store (for use outside React hooks)
+export function getActiveBoardId(): string | null {
+  return store.snapshot?.activeBoardId ?? null
+}
+
 // Test hook — let CDP-driven smoke tests fire actions directly past the
 // UI guards. Mirrors the filter in `sendAction` so we send exactly the
 // same wire frames React does.

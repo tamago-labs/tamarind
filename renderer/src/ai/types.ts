@@ -74,13 +74,13 @@ export interface AiStatusShim {
  * the pick survives reloads.
  */
 export interface AiConfig {
-  ctx_size: 2048 | 4096 | 8192
+  ctx_size: 2048 | 4096 | 8192 | 16384
   tools: boolean
 }
 
-export const DEFAULT_AI_CONFIG: AiConfig = { ctx_size: 4096, tools: false }
+export const DEFAULT_AI_CONFIG: AiConfig = { ctx_size: 8192, tools: true }
 
-export const CTX_SIZE_OPTIONS: ReadonlyArray<AiConfig['ctx_size']> = [2048, 4096, 8192]
+export const CTX_SIZE_OPTIONS: ReadonlyArray<AiConfig['ctx_size']> = [2048, 4096, 8192, 16384]
 
 // ──────────────────────────── Phase 6: AI chat ────────────────────────────
 

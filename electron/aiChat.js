@@ -2,26 +2,126 @@
 // local Tamarind session and forwards streaming events to the renderer
 // over IPC push channels.
 //
-// Phase 1: local-only. Streams directly from the loaded model in
-// electron/qvac.js. Phase 3 will route to a peer's model via
-// electron/aiChatRelay.js, but the local chokepoint stays the same
-// for the requester side too (the relay just transports the request
-// to a peer's identical chokepoint).
+// Supports tool calling for canvas manipulation. When tools are enabled
+// in the AI config, the AI can call canvas tools to create, update, and
+// remove shapes on the whiteboard automatically.
 //
-// Design notes (from the reference project review):
-//   - `stream: true, kvCache: true, captureThinking: true` — matches
-//     my-doctor-ai and walrus-form-studio.
-//   - **No `tools` argument** — tool calling is out of scope for
-//     Tamarind. The model itself is loaded with `tools: false` in
-//     modelConfig; we additionally omit `tools` here so the SDK
-//     never sees tool definitions.
-//   - Single-flight: a second `sendMessage` while a stream is in
-//     flight returns `{ success: false, error: 'BUSY' }`.
-//   - The renderer's `useAIChat` listens for `ai:chat:done` and
-//     commits the streamed content into a finalized message.
+// Uses an agentic loop (inspired by everclaw): after each completion
+// that produces tool calls, results are appended to history and a new
+// completion is started. The loop is capped at MAX_TOOL_CALLS iterations.
 
 const { completion, cancel: sdkCancel } = require('@qvac/sdk')
-const { mapError, getActiveModelId, setStreamingNow } = require('./qvac')
+const { mapError, getActiveModelId, getActiveConfig, setStreamingNow } = require('./qvac')
+const { executeCanvasTool } = require('./canvasTools')
+
+// System prompt for canvas-aware AI. Only used when tools are enabled.
+// Canvas state is NOT injected here — the AI uses get_items tool to query it.
+const CANVAS_SYSTEM_PROMPT = `You are a tactical whiteboard assistant for Tamarind. You help users create and modify canvas diagrams for sports tactics, sales pipelines, system architectures, and other planning scenarios.
+
+AVAILABLE TOOLS:
+- get_items: View all current canvas items on the board
+- add_items: Add shapes to the canvas (rect, ellipse, text, connector)
+- update_items: Modify existing items by their ID
+- remove_items: Remove items by their ID
+
+BEHAVIOR:
+- ALWAYS use get_items first to see what exists before making changes
+- After using add_items, acknowledge what was created with specific details
+- Plan layouts before adding items — space them properly (min 40-60 units gap)
+- For sports: use player abbreviations (GK, CB, CM, ST, PG, PF)
+- For diagrams: use descriptive labels on boxes and arrows
+- Respond in natural language describing what you did
+
+SHAPE TYPES:
+- rect: Rectangle with text (w=160, h=100 default)
+- ellipse: Circle/ellipse with text (players: w=36, h=36)
+- text: Standalone text block (w=200, h=50)
+- connector: Arrow/line with startX/startY and endX/endY
+
+COORDINATES: (0,0) top-left, canvas ~1000x700 units
+
+COLORS: #86efac (green/fields), #dbeafe (blue/info), #fde68a (yellow/courts), #fed7aa (orange/alerts), #ddd6fe (purple/UI)`
+
+// ───────────────────────────── Canvas tool definitions ─────────────────────
+
+const CANVAS_TOOLS = [
+  {
+    type: 'function',
+    name: 'get_items',
+    description: 'Get all items on the current board',
+    parameters: { type: 'object', properties: {} }
+  },
+  {
+    type: 'function',
+    name: 'add_items',
+    description:
+      'Add shapes to the canvas (rect, ellipse, text, connector). Use x,y for position, w,h for size, text for labels, fill/stroke for colors.',
+    parameters: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', enum: ['rect', 'ellipse', 'text', 'connector'] },
+              x: { type: 'number' },
+              y: { type: 'number' },
+              w: { type: 'number' },
+              h: { type: 'number' },
+              text: { type: 'string' },
+              fill: { type: 'string' },
+              stroke: { type: 'string' },
+              strokeWidth: { type: 'number' },
+              fontSize: { type: 'number' },
+              startX: { type: 'number' },
+              startY: { type: 'number' },
+              endX: { type: 'number' },
+              endY: { type: 'number' },
+              label: { type: 'string' }
+            },
+            required: ['type', 'x', 'y']
+          }
+        }
+      },
+      required: ['items']
+    }
+  },
+  {
+    type: 'function',
+    name: 'update_items',
+    description: 'Update existing items by id with a patch of new values',
+    parameters: {
+      type: 'object',
+      properties: {
+        updates: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              patch: { type: 'object' }
+            },
+            required: ['id', 'patch']
+          }
+        }
+      },
+      required: ['updates']
+    }
+  },
+  {
+    type: 'function',
+    name: 'remove_items',
+    description: 'Remove items from the canvas by id',
+    parameters: {
+      type: 'object',
+      properties: {
+        ids: { type: 'array', items: { type: 'string' } }
+      },
+      required: ['ids']
+    }
+  }
+]
 
 // ───────────────────────────── module state ─────────────────────────────
 
@@ -29,6 +129,8 @@ let mainWindowRef = /** @type {Electron.BrowserWindow|null} */ (null)
 let currentRequestId = /** @type {string|null} */ (null)
 let currentAbort = /** @type {AbortController|null} */ (null)
 let startedAt = /** @type {number|null} */ (null)
+let currentHistory = /** @type {Array<{role: string, content: string}>} */ ([])
+const MAX_TOOL_CALLS = 5
 
 function send(channel, payload) {
   if (mainWindowRef && !mainWindowRef.isDestroyed()) {
@@ -54,18 +156,8 @@ function isBusy() {
   return currentRequestId !== null
 }
 
-/**
- * Notify the rest of the system that local inference is currently
- * busy (`accepting: false`) or free (`accepting: true`). Called by
- * `electron/main.js` after a successful `sendMessage` start (false)
- * and on the `done` / `error` settle (true). Phase 2 + 3 mirror
- * this into a P2P-replicated `ai-state` row so peers can see
- * whether to route to us.
- */
 function setAccepting(_accepting) {
-  // No-op locally — the relay pushes the new ai-state to the room
-  // worker, which broadcasts the `update-ai-state` dispatch.
-  // (Hooked up in Step 7 — Phase 2.)
+  // No-op locally
 }
 
 async function sendMessage({ messages }) {
@@ -80,10 +172,7 @@ async function sendMessage({ messages }) {
     return { success: false, error: 'No model loaded. Pick one in Setup.' }
   }
 
-  // Map our `ChatTurn` shape to the SDK's history. The SDK only
-  // needs role + content; the optional `thinking` is dropped (the
-  // SDK re-derives thinking from `<think>` tags via captureThinking).
-  const history = messages
+  let history = messages
     .filter((m) => m && (m.role === 'user' || m.role === 'assistant'))
     .map((m) => ({ role: m.role, content: m.content }))
 
@@ -95,26 +184,29 @@ async function sendMessage({ messages }) {
   startedAt = Date.now()
   setStreamingNow(true)
 
-  // The SDK doesn't take an AbortSignal directly; we mirror via
-  // cancel() in cancelMessage(). The requestId is set on the
-  // returned `run` object synchronously.
+  const config = getActiveConfig()
+  const toolsEnabled = config.tools
+  const tools = toolsEnabled ? CANVAS_TOOLS : undefined
+
+  if (toolsEnabled) {
+    history = [{ role: 'system', content: CANVAS_SYSTEM_PROMPT }, ...history]
+  }
+
+  // Store history for agentic loop (excluding system prompt)
+  currentHistory = toolsEnabled ? history.slice(1) : history
+
   const run = completion({
     modelId,
     history,
     stream: true,
     kvCache: true,
-    captureThinking: true
-    // tools: undefined — explicitly omitted, never pass tool defs
+    captureThinking: true,
+    tools
   })
   currentRequestId = run.requestId
   setAccepting(false)
   send('ai:chat:status', getStatus())
 
-  // Drive the event stream asynchronously. We don't await the loop
-  // here — `sendMessage` resolves once the run is *started*. The
-  // renderer's `useAIChat` subscribes to `ai:chat:done` /
-  // `ai:chat:error` for completion. Errors thrown from the loop
-  // are caught and forwarded; the loop never rejects unhandled.
   driveStream(run).catch((err) => {
     console.error('[aiChat] driveStream unhandled error:', err)
   })
@@ -131,7 +223,7 @@ async function cancelMessage() {
     await sdkCancel({ requestId: id })
   } catch (err) {
     if (err && err.name === 'InferenceCancelledError') {
-      // Expected — the loop will emit its own done/error.
+      // Expected
     } else {
       console.warn('[aiChat] cancel failed:', err)
     }
@@ -141,51 +233,134 @@ async function cancelMessage() {
 
 // ───────────────────────────── internals ─────────────────────────────────
 
+// Settle helper — marks the stream as finished and sends the final event
+function settleStream(kind, payload) {
+  currentRequestId = null
+  currentAbort = null
+  startedAt = null
+  setStreamingNow(false)
+  setAccepting(true)
+  send('ai:chat:status', getStatus())
+  send(kind, payload)
+}
+
+// Stream a single completion run, collecting tool results.
+// Returns { stopReason, error, toolResults, assistantContent }
+async function streamRun(run) {
+  const toolResults = []
+  let assistantContent = ''
+
+  for await (const event of run.events) {
+    if (event.type === 'contentDelta') {
+      assistantContent += event.text
+      send('ai:chat:token', { requestId: run.requestId, text: event.text })
+    } else if (event.type === 'thinkingDelta') {
+      send('ai:chat:thinking', { requestId: run.requestId, text: event.text })
+    } else if (event.type === 'completionStats') {
+      send('ai:chat:stats', { requestId: run.requestId, stats: event.stats })
+    } else if (event.type === 'toolCall') {
+      const toolName = event.call?.name || ''
+      const toolArgs = event.call?.arguments || {}
+      console.log('[aiChat] Tool call:', toolName, JSON.stringify(toolArgs).slice(0, 200))
+      try {
+        const result = await executeCanvasTool(run.requestId, toolName, toolArgs, mainWindowRef)
+        console.log('[aiChat] Tool result:', JSON.stringify(result).slice(0, 200))
+        toolResults.push({ role: 'tool', content: JSON.stringify(result) })
+        send('ai:chat:toolResult', {
+          requestId: run.requestId,
+          name: toolName,
+          result
+        })
+      } catch (toolErr) {
+        console.error('[aiChat] Tool execution error:', toolErr)
+        toolResults.push({
+          role: 'tool',
+          content: JSON.stringify({ success: false, error: toolErr.message })
+        })
+      }
+    } else if (event.type === 'completionDone') {
+      return {
+        stopReason: event.stopReason ?? 'eos',
+        error: event.error,
+        toolResults,
+        assistantContent
+      }
+    }
+  }
+  return { stopReason: 'eos', error: null, toolResults, assistantContent }
+}
+
+// Main entry point — drives the agentic loop
 async function driveStream(run) {
   let settled = false
+  let lastRequestId = run.requestId
   function settle(kind, payload) {
     if (settled) return
     settled = true
-    currentRequestId = null
-    currentAbort = null
-    startedAt = null
-    setStreamingNow(false)
-    setAccepting(true)
-    send('ai:chat:status', getStatus())
-    send(kind, { requestId: run.requestId, ...payload })
+    settleStream(kind, { requestId: lastRequestId, ...payload })
   }
 
+  let toolCallCount = 0
+
   try {
-    for await (const event of run.events) {
-      if (event.type === 'contentDelta') {
-        send('ai:chat:token', { requestId: run.requestId, text: event.text })
-      } else if (event.type === 'thinkingDelta') {
-        send('ai:chat:thinking', { requestId: run.requestId, text: event.text })
-      } else if (event.type === 'completionStats') {
-        // Useful for the renderer's "X tok/s" indicator. Cheap to
-        // forward; the renderer ignores it if it doesn't care.
-        send('ai:chat:stats', { requestId: run.requestId, stats: event.stats })
-      } else if (event.type === 'completionDone') {
-        if (event.stopReason === 'error' && event.error) {
-          settle('ai:chat:error', {
-            error: {
-              code: 'COMPLETION_ERROR',
-              message: event.error.message,
-              retryable: true
-            }
-          })
-        } else {
-          settle('ai:chat:done', {
-            stopReason: event.stopReason ?? 'eos'
-          })
-        }
-      }
-      // `rawDelta` and `toolCall` are intentionally ignored — raw
-      // bypasses the parsed stream and we don't do tool calling.
+    // First completion run
+    let result = await streamRun(run)
+
+    // Agentic loop: keep calling completion while there are tool results
+    while (result.toolResults && result.toolResults.length > 0 && toolCallCount < MAX_TOOL_CALLS) {
+      toolCallCount++
+      console.log(
+        '[aiChat] Agentic loop iteration',
+        toolCallCount,
+        ':',
+        result.toolResults.length,
+        'tool results'
+      )
+
+      // Append assistant content + tool results to history
+      currentHistory.push(
+        { role: 'assistant', content: result.assistantContent || '(tool call)' },
+        ...result.toolResults
+      )
+
+      // Start new completion with updated history
+      const config = getActiveConfig()
+      const fullHistory = [{ role: 'system', content: CANVAS_SYSTEM_PROMPT }, ...currentHistory]
+
+      // After first tool call iteration, remove tools to force text output
+      // This matches the Walrus pattern - model must produce text on second call
+      const toolsForNext = toolCallCount === 1 ? undefined : config.tools ? CANVAS_TOOLS : undefined
+
+      const newRun = completion({
+        modelId: getActiveModelId(),
+        history: fullHistory,
+        stream: true,
+        kvCache: true,
+        captureThinking: true,
+        tools: toolsForNext
+      })
+      lastRequestId = newRun.requestId
+      currentRequestId = newRun.requestId
+      send('ai:chat:status', getStatus())
+
+      // Stream the new completion
+      result = await streamRun(newRun)
     }
-    // Stream ended without an explicit `completionDone` event. Still
-    // treat as success (older SDK versions may finalize this way).
-    settle('ai:chat:done', { stopReason: 'eos' })
+
+    // Check for errors
+    if (result.error) {
+      settle('ai:chat:error', {
+        error: {
+          code: 'COMPLETION_ERROR',
+          message: result.error.message,
+          retryable: true
+        }
+      })
+      return
+    }
+
+    // Done — settle with success
+    settle('ai:chat:done', { stopReason: result.stopReason })
   } catch (err) {
     const mapped = mapError(err)
     settle('ai:chat:error', { error: mapped })

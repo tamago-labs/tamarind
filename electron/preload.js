@@ -100,6 +100,20 @@ contextBridge.exposeInMainWorld('bridge', {
       const handler = (_evt, p) => cb(p)
       ipcRenderer.on('ai:chat:status', handler)
       return () => ipcRenderer.removeListener('ai:chat:status', handler)
+    },
+    onToolCall: (cb) => {
+      const handler = (_evt, p) => cb(p)
+      ipcRenderer.on('ai:chat:toolCall', handler)
+      return () => ipcRenderer.removeListener('ai:chat:toolCall', handler)
+    },
+    onToolResult: (cb) => {
+      const handler = (_evt, p) => cb(p)
+      ipcRenderer.on('ai:chat:toolResult', handler)
+      return () => ipcRenderer.removeListener('ai:chat:toolResult', handler)
+    },
+    // Send tool result back to main process (fire-and-forget)
+    sendToolResult: (requestId, result) => {
+      ipcRenderer.send('chat:toolResult', { requestId, result })
     }
   },
   // Phase 6: file-based AI chat session store. NOT a P2P collection —

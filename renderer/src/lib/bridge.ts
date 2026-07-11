@@ -81,6 +81,10 @@ export interface BridgeAPI {
     onDone(cb: (e: ChatDoneEvent) => void): () => void
     onError(cb: (e: ChatErrorEvent) => void): () => void
     onStatus(cb: (e: ChatStatusEvent) => void): () => void
+    onToolCall(
+      cb: (e: { requestId: string; name: string; args: Record<string, unknown> }) => void
+    ): () => void
+    sendToolResult(requestId: string, result: unknown): void
   }
   // Phase 6: file-based AI chat session store. NOT P2P-replicated.
   sessions: {
@@ -214,7 +218,9 @@ const noopBridge: BridgeAPI = {
     onStats: () => () => {},
     onDone: () => () => {},
     onError: () => () => {},
-    onStatus: () => () => {}
+    onStatus: () => () => {},
+    onToolCall: () => () => {},
+    sendToolResult: () => {}
   },
   sessions: {
     list: () => Promise.resolve([]),
