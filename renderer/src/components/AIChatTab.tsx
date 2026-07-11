@@ -19,12 +19,13 @@
 // is the hand-off into the Workspace tab.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, FileText, Plus, Send, Square, Trash2, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, FileText, Plus, Send, Settings, Square, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useAI } from '../hooks/useAI'
 import { useAIChat } from '../hooks/useAIChat'
 import { useRoom } from '../hooks/useRoom'
+import { DEFAULT_AI_CONFIG } from '../ai/types'
 import type { ChatTurn } from '../ai/types'
 
 interface AIChatTabProps {}
@@ -36,9 +37,10 @@ export function AIChatTab(_props: AIChatTabProps) {
   const listRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [draft, setDraft] = useState('')
-  const [confirmingClear, setConfirmingClear] = useState(false)
+
   const [showSessionMenu, setShowSessionMenu] = useState(false)
   const [showSourceMenu, setShowSourceMenu] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
 
   // Auto-scroll to the bottom of the message list on new content.
   useEffect(() => {
@@ -46,13 +48,6 @@ export function AIChatTab(_props: AIChatTabProps) {
     if (!el) return
     el.scrollTop = el.scrollHeight
   }, [chat.messages.length, chat.streamingContent, chat.streamingThinking])
-
-  // Auto-dismiss the destructive confirms after 4s.
-  useEffect(() => {
-    if (!confirmingClear) return
-    const t = setTimeout(() => setConfirmingClear(false), 4000)
-    return () => clearTimeout(t)
-  }, [confirmingClear])
 
   const currentSession = useMemo(
     () => chat.sessions.find((s) => s.slug === chat.currentSessionSlug) ?? null,
@@ -97,12 +92,7 @@ export function AIChatTab(_props: AIChatTabProps) {
   }
 
   function handleClear() {
-    if (confirmingClear) {
-      setConfirmingClear(false)
-      void chat.clearSession(chat.currentSessionSlug)
-      return
-    }
-    setConfirmingClear(true)
+    void chat.clearSession(chat.currentSessionSlug)
   }
 
   async function handleDeleteSession(slug: string) {
@@ -136,7 +126,7 @@ export function AIChatTab(_props: AIChatTabProps) {
 
   return (
     <div className='flex h-full flex-col gap-2'>
-      {/* ── Session bar + Source button ─────────────────────────── */}
+      {/* ── Session bar + Source button + Settings ──────────────── */}
       <div className='flex items-center gap-1.5'>
         <div className='relative flex-1'>
           <button
@@ -270,26 +260,117 @@ export function AIChatTab(_props: AIChatTabProps) {
           )}
         </div>
 
-        <button
-          type='button'
-          onClick={handleClear}
-          disabled={!currentSession || currentSession.messageCount === 0 || chat.isStreaming}
-          aria-label={confirmingClear ? 'Confirm clear messages' : 'Clear messages'}
-          title={
-            confirmingClear
-              ? 'Click again to confirm'
-              : currentSession && currentSession.messageCount > 0
-                ? 'Clear all messages in this session'
-                : 'No messages to clear'
-          }
-          className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed ${
-            confirmingClear
-              ? 'border-red-600 bg-red-600 text-white hover:bg-red-700'
-              : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:text-gray-300'
-          }`}
-        >
-          <Trash2 className='h-3.5 w-3.5' aria-hidden='true' />
-        </button>
+        {/* ── Settings button + popover ─────────────────────────── */}
+        <div className='relative'>
+          <button
+            type='button'
+            onClick={() => setShowSettings((v) => !v)}
+            aria-label='Settings'
+            title='AI settings'
+            className='inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition hover:bg-gray-50 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500'
+          >
+            <Settings className='h-3.5 w-3.5' />
+          </button>
+          {showSettings && (
+            <div className='absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-gray-200 bg-white shadow-lg'>
+              <div className='p-3'>
+                {/* Prompt-to-canvas toggle */}
+                <div className='mb-3'>
+                  <div className='flex items-center justify-between'>
+                    <span className='text-xs font-medium text-gray-700'>Prompt-to-Canvas</span>
+                    <button
+                      type='button'
+                      onClick={() => ai.setConfig({ ...ai.config, tools: !ai.config.tools })}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                        ai.config.tools ? 'bg-blue-600' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 rounded-full bg-white shadow transition ${
+                          ai.config.tools ? 'translate-x-4' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tool toggles */}
+                {ai.config.tools && (
+                  <div className='mb-3'>
+                    <p className='mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500'>
+                      Tools
+                    </p>
+                    <div className='space-y-1.5'>
+                      {[
+                        { key: 'get_items', label: 'Get items', alwaysOn: true },
+                        { key: 'add_items', label: 'Add items' },
+                        { key: 'update_items', label: 'Update items' },
+                        { key: 'remove_items', label: 'Remove items' }
+                      ].map((tool) => (
+                        <div key={tool.key} className='flex items-center justify-between'>
+                          <span className='text-xs text-gray-700'>{tool.label}</span>
+                          <button
+                            type='button'
+                            disabled={tool.alwaysOn}
+                            onClick={() => {
+                              const tc = ai.config.toolConfig ?? {
+                                add_items: true,
+                                update_items: false,
+                                remove_items: true,
+                                get_items: true
+                              }
+                              ai.setConfig({
+                                ...ai.config,
+                                toolConfig: {
+                                  ...tc,
+                                  [tool.key]: !tc[tool.key as keyof typeof tc]
+                                }
+                              })
+                            }}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                              (ai.config.toolConfig ?? DEFAULT_AI_CONFIG.toolConfig ?? {})[
+                                tool.key as keyof typeof ai.config.toolConfig
+                              ] === true
+                                ? 'bg-blue-600'
+                                : 'bg-gray-300'
+                            } ${tool.alwaysOn ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            <span
+                              className={`inline-block h-4 w-4 rounded-full bg-white shadow transition ${
+                                (ai.config.toolConfig ?? DEFAULT_AI_CONFIG.toolConfig ?? {})[
+                                  tool.key as keyof typeof ai.config.toolConfig
+                                ] === true
+                                  ? 'translate-x-4'
+                                  : 'translate-x-0.5'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Divider */}
+                <div className='mb-3 border-t border-gray-200 pt-3'>
+                  <button
+                    type='button'
+                    onClick={() => {
+                      handleClear()
+                      setShowSettings(false)
+                    }}
+                    disabled={
+                      !currentSession || currentSession.messageCount === 0 || chat.isStreaming
+                    }
+                    className='w-full rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:text-gray-300'
+                  >
+                    Clear all messages
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Status hint (current source) ────────────────────────── */}
