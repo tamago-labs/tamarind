@@ -92,6 +92,8 @@ interface CanvasToolbarProps {
   invite: string | null
   role: string | null
   peers: number
+  // Knowledge Base
+  onOpenKnowledgeBase: () => void
 }
 
 const SHORTCUT_HINT = 'Cmd/Ctrl+Z to undo · Cmd/Ctrl+Shift+Z to redo · Cmd/Ctrl+A to select all'
@@ -237,7 +239,8 @@ export function CanvasToolbar({
   onExportPng,
   invite,
   role,
-  peers
+  peers,
+  onOpenKnowledgeBase
 }: CanvasToolbarProps) {
   const [showInvite, setShowInvite] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -441,6 +444,18 @@ export function CanvasToolbar({
             </div>
           )}
         </div>
+
+        {/* ── Knowledge Base button ────────────────────────────── */}
+        <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
+        <button
+          type='button'
+          onClick={onOpenKnowledgeBase}
+          aria-label='Knowledge Base'
+          title='Knowledge Base'
+          className='inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-gray-700 transition hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500'
+        >
+          Knowledge Base
+        </button>
       </div>
     </header>
   )

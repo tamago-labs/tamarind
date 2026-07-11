@@ -268,6 +268,23 @@ async function handleToolCall(
           message: `Successfully removed ${ids.length} shape(s) from the canvas`
         }
       }
+    } else if (name === 'search_knowledge_base') {
+      const query = args.query as string
+      const topK = (args.top_k as number) ?? 5
+      const searchResult = await bridge.rag.search({ query, topK })
+
+      if (searchResult.success && searchResult.results) {
+        result = {
+          success: true,
+          count: searchResult.results.length,
+          results: searchResult.results.map((r) => ({
+            content: r.content,
+            score: r.score
+          }))
+        }
+      } else {
+        result = { success: false, error: searchResult.error || 'Search failed' }
+      }
     } else {
       result = { success: false, error: `Unknown tool: ${name}` }
     }

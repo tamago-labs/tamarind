@@ -82,6 +82,7 @@ export interface AiConfig {
     remove_items: boolean
     get_items: boolean
   }
+  knowledgeBase?: boolean
 }
 
 export const DEFAULT_AI_CONFIG: AiConfig = {
@@ -92,7 +93,8 @@ export const DEFAULT_AI_CONFIG: AiConfig = {
     update_items: false,
     remove_items: true,
     get_items: true
-  }
+  },
+  knowledgeBase: false
 }
 
 export const CTX_SIZE_OPTIONS: ReadonlyArray<AiConfig['ctx_size']> = [2048, 4096, 8192, 16384]

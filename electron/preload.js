@@ -145,5 +145,17 @@ contextBridge.exposeInMainWorld('bridge', {
     const handler = (_evt, e) => cb(e)
     ipcRenderer.on('ai:chat:relay-event', handler)
     return () => ipcRenderer.removeListener('ai:chat:relay-event', handler)
+  },
+  rag: {
+    model: {
+      load: (args) => ipcRenderer.invoke('rag:model:load', args),
+      unload: () => ipcRenderer.invoke('rag:model:unload'),
+      status: () => ipcRenderer.invoke('rag:model:status')
+    },
+    ingest: (args) => ipcRenderer.invoke('rag:ingest', args),
+    search: (args) => ipcRenderer.invoke('rag:search', args),
+    list: () => ipcRenderer.invoke('rag:list'),
+    delete: (args) => ipcRenderer.invoke('rag:delete', args),
+    fetchUrl: (args) => ipcRenderer.invoke('rag:fetch-url', args)
   }
 })

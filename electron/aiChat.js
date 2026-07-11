@@ -137,6 +137,21 @@ const CANVAS_TOOLS = [
   }
 ]
 
+const KNOWLEDGE_BASE_TOOL = {
+  type: 'function',
+  name: 'search_knowledge_base',
+  description:
+    'Search the Knowledge Base for relevant documents. Use this when users ask about specific topics, data, or information that might be stored in the Knowledge Base.',
+  parameters: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Search query' },
+      top_k: { type: 'number', description: 'Number of results (default: 5)' }
+    },
+    required: ['query']
+  }
+}
+
 // ───────────────────────────── module state ─────────────────────────────
 
 let mainWindowRef = /** @type {Electron.BrowserWindow|null} */ (null)
@@ -200,7 +215,9 @@ async function sendMessage({ messages }) {
 
   const config = getActiveConfig()
   const toolsEnabled = config.tools
-  const tools = toolsEnabled ? CANVAS_TOOLS : undefined
+  const tools = toolsEnabled
+    ? [...CANVAS_TOOLS, ...(config.knowledgeBase ? [KNOWLEDGE_BASE_TOOL] : [])]
+    : undefined
 
   if (toolsEnabled) {
     history = [{ role: 'system', content: CANVAS_SYSTEM_PROMPT }, ...history]
@@ -343,7 +360,12 @@ async function driveStream(run) {
 
       // After first tool call iteration, disable tools to force text output
       // This prevents the AI from creating items in a loop
-      const toolsForNext = toolCallCount >= 1 ? undefined : config.tools ? CANVAS_TOOLS : undefined
+      const toolsForNext =
+        toolCallCount >= 1
+          ? undefined
+          : config.tools
+            ? [...CANVAS_TOOLS, ...(config.knowledgeBase ? [KNOWLEDGE_BASE_TOOL] : [])]
+            : undefined
 
       const newRun = completion({
         modelId: getActiveModelId(),

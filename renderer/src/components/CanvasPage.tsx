@@ -53,6 +53,7 @@ import { CanvasFooter } from './CanvasFooter'
 import { CanvasToolbar, type SelectedTool } from './CanvasToolbar'
 import { PropertiesDrawer } from './PropertiesDrawer'
 import { TemplatesModal } from './TemplatesModal'
+import { KnowledgeBaseModal } from './KnowledgeBaseModal'
 import { SlideInPanel } from './SlideInPanel'
 import { FloatingChatButton } from './FloatingChatButton'
 import { AIChatTab } from './AIChatTab'
@@ -195,6 +196,9 @@ export function CanvasPage() {
   // Templates modal open/close. Insert closes the modal as a side effect
   // of the optimistic dispatch in `handleInsertTemplate`.
   const [templatesOpen, setTemplatesOpen] = useState(false)
+
+  // Knowledge Base modal open/close
+  const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(false)
 
   // Toggle marquee mode. Clicking the toolbar button arms the marquee;
   // clicking it again (or pressing Escape) disarms it. The toggle stays
@@ -1360,6 +1364,7 @@ export function CanvasPage() {
         invite={room.invite}
         role={room.role}
         peers={room.peers}
+        onOpenKnowledgeBase={() => setKnowledgeBaseOpen(true)}
       />
       {feedbackBanner && (
         <div
@@ -1519,6 +1524,8 @@ export function CanvasPage() {
         onClose={() => setTemplatesOpen(false)}
         onInsert={handleInsertTemplate}
       />
+
+      <KnowledgeBaseModal open={knowledgeBaseOpen} onClose={() => setKnowledgeBaseOpen(false)} />
     </motion.div>
   )
 }

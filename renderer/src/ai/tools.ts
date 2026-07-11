@@ -201,6 +201,28 @@ export const CANVAS_TOOLS: ToolDefinition[] = [
   }
 ]
 
+// Knowledge Base search tool
+export const KNOWLEDGE_BASE_TOOL: ToolDefinition = {
+  type: 'function',
+  name: 'search_knowledge_base',
+  description:
+    'Search the Knowledge Base for relevant documents. Use this when users ask about specific topics, data, or information that might be stored in the Knowledge Base.',
+  parameters: {
+    type: 'object',
+    properties: {
+      query: {
+        type: 'string',
+        description: 'The search query to find relevant documents'
+      },
+      top_k: {
+        type: 'number',
+        description: 'Number of results to return (default: 5)'
+      }
+    },
+    required: ['query']
+  }
+}
+
 // Get tools for the current config
 export function getToolsForConfig(toolsEnabled: boolean): ToolDefinition[] | undefined {
   return toolsEnabled ? CANVAS_TOOLS : undefined

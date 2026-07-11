@@ -25,6 +25,7 @@ import remarkGfm from 'remark-gfm'
 import { useAI } from '../hooks/useAI'
 import { useAIChat } from '../hooks/useAIChat'
 import { useRoom } from '../hooks/useRoom'
+import { bridge } from '../lib/bridge'
 import { DEFAULT_AI_CONFIG } from '../ai/types'
 import type { ChatTurn } from '../ai/types'
 
@@ -274,6 +275,45 @@ export function AIChatTab(_props: AIChatTabProps) {
           {showSettings && (
             <div className='absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-gray-200 bg-white shadow-lg'>
               <div className='p-3'>
+                {/* Knowledge Base toggle */}
+                <div className='mb-3'>
+                  <div className='flex items-center justify-between'>
+                    <span className='text-xs font-medium text-gray-700'>Use Knowledge Base</span>
+                    <button
+                      type='button'
+                      disabled={chat.aiSource?.kind === 'peer'}
+                      onClick={() => {
+                        const newValue = !ai.config.knowledgeBase
+                        ai.setConfig({ ...ai.config, knowledgeBase: newValue })
+                        // Auto-load embedding model when KB is enabled
+                        if (newValue) {
+                          bridge.rag.model.load()
+                        }
+                      }}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                        chat.aiSource?.kind === 'peer'
+                          ? 'cursor-not-allowed opacity-50 bg-gray-200'
+                          : ai.config.knowledgeBase
+                            ? 'bg-blue-600'
+                            : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 rounded-full bg-white shadow transition ${
+                          ai.config.knowledgeBase && chat.aiSource?.kind !== 'peer'
+                            ? 'translate-x-4'
+                            : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  {chat.aiSource?.kind === 'peer' && (
+                    <p className='mt-1 text-[10px] text-amber-600'>
+                      ⚠️ Knowledge Base requires local AI source
+                    </p>
+                  )}
+                </div>
+
                 {/* Prompt-to-canvas toggle */}
                 <div className='mb-3'>
                   <div className='flex items-center justify-between'>

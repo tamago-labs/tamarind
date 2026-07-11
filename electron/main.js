@@ -19,6 +19,7 @@ const {
 const { modelStore } = require('./modelStore')
 const aiChat = require('./aiChat')
 const sessions = require('./sessions')
+const ragStore = require('./ragStore')
 const path = require('path')
 const PearRuntime = require('pear-runtime')
 const FramedStream = require('framed-stream')
@@ -532,6 +533,57 @@ function registerChatIpc() {
   console.log('AI chat / sessions IPC handlers registered')
 }
 
+function registerRagIpc() {
+  ipcMain.handle('rag:model:load', async (_evt, args) => {
+    try {
+      await ragStore.ensureEmbeddingModel(args?.onProgress)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('rag:model:unload', async () => {
+    try {
+      await ragStore.unloadEmbeddingModel()
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('rag:model:status', async () => {
+    return ragStore.getModelStatus()
+  })
+
+  ipcMain.handle('rag:ingest', async (_evt, args) => {
+    return ragStore.ingestDocument(args.name, args.content, args.source)
+  })
+
+  ipcMain.handle('rag:search', async (_evt, args) => {
+    return ragStore.searchDocuments(args.query, args.topK)
+  })
+
+  ipcMain.handle('rag:list', async () => {
+    return ragStore.listDocuments()
+  })
+
+  ipcMain.handle('rag:fetch-url', async (_evt, args) => {
+    try {
+      const content = await ragStore.fetchUrlContent(args.url)
+      return { success: true, content }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('rag:delete', async (_evt, args) => {
+    return ragStore.deleteDocument(args.id)
+  })
+
+  console.log('RAG / Knowledge Base IPC handlers registered')
+}
+
 // ──────────────────── AI state broadcast (Phase 7) ────────────────────
 
 // Phase 7: push the local AI state to the room worker. The worker
@@ -925,6 +977,7 @@ if (!lock) {
     // first invoke; the renderer's useAI() hydrates status() on mount.
     registerModelsIpc()
     registerChatIpc()
+    registerRagIpc()
 
     // Create the 'main' AI chat session directory + empty
     // messages.json so the first `sessions:list` from the renderer

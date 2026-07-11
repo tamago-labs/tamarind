@@ -34,6 +34,18 @@ export interface Pkg {
   [key: string]: unknown
 }
 
+export interface RagSearchResult {
+  content: string
+  score: number
+}
+
+export interface RagDocument {
+  id: string
+  name: string
+  source: 'text' | 'url'
+  createdAt: string
+}
+
 export interface BridgeAPI {
   pkg(): Pkg
   applyUpdate(): Promise<void>
@@ -151,6 +163,28 @@ export interface BridgeAPI {
       error?: { code: string; message: string; retryable: boolean } | null
     }) => void
   ): () => void
+
+  rag: {
+    model: {
+      load(args?: {
+        onProgress?: (p: number) => void
+      }): Promise<{ success: boolean; error?: string }>
+      unload(): Promise<{ success: boolean; error?: string }>
+      status(): Promise<'unloaded' | 'loading' | 'ready'>
+    }
+    ingest(args: {
+      name: string
+      content: string
+      source?: string
+    }): Promise<{ success: boolean; processed?: number; error?: string }>
+    search(args: {
+      query: string
+      topK?: number
+    }): Promise<{ success: boolean; results?: RagSearchResult[]; error?: string }>
+    list(): Promise<RagDocument[]>
+    delete(args: { id: string }): Promise<{ success: boolean; error?: string }>
+    fetchUrl(args: { url: string }): Promise<{ success: boolean; content?: string; error?: string }>
+  }
 }
 
 // Worker specifiers. Picked by the renderer when calling
@@ -238,7 +272,19 @@ const noopBridge: BridgeAPI = {
     route: () => Promise.resolve({ success: false, error: 'bridge not available' }),
     routeCancel: () => Promise.resolve({ success: false })
   },
-  onRelayEvent: () => () => {}
+  onRelayEvent: () => () => {},
+  rag: {
+    model: {
+      load: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+      unload: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+      status: () => Promise.resolve('unloaded')
+    },
+    ingest: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+    search: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+    list: () => Promise.resolve([]),
+    delete: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+    fetchUrl: () => Promise.resolve({ success: false, error: 'bridge not available' })
+  }
 }
 
 export const bridge: BridgeAPI =
