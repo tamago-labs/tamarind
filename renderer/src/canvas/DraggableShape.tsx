@@ -22,6 +22,7 @@ import { RectShape } from './shapes/RectShape'
 import { TextShape } from './shapes/TextShape'
 import { NoteShape } from './shapes/NoteShape'
 import { ConnectorShape } from './shapes/ConnectorShape'
+import { VideoShape } from './VideoShape'
 import { SelectionOverlay } from './SelectionOverlay'
 import { ResizeHandles } from './ResizeHandles'
 import { ConnectorHandles } from './ConnectorHandles'
@@ -71,6 +72,8 @@ function ShapeForItem({
       return (
         <NoteShape item={item} width={item.w ?? 120} height={item.h ?? 80} onUpdate={onUpdate} />
       )
+    case 'video':
+      return <VideoShape item={item} onUpdate={onUpdate} />
   }
 }
 

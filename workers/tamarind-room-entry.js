@@ -87,6 +87,13 @@ class TamarindRoomWorkerTask extends ReadyResource {
     this.localBase = this.room.localBase
     this.debounceBroadcast = debounce(() => this._broadcast())
     this.room.on('update', () => this.debounceBroadcast())
+
+    // Initialize Hyperblobs and blob server for video streaming (per Pear docs)
+    const Hyperblobs = require('hyperblobs')
+    const BlobServer = require('hypercore-blob-server')
+    this.blobs = new Hyperblobs(this.store.get({ name: 'blobs' }))
+    this.blobServer = new BlobServer(this.store.session(), { sandbox: false })
+    this.blobsCores = {}
   }
 
   async _open() {
@@ -102,6 +109,17 @@ class TamarindRoomWorkerTask extends ReadyResource {
     // first.
     await this.room.ready()
     await this._loadIdentity()
+
+    // Start blob server for video streaming (per Pear docs)
+    await this.blobs.ready()
+    await this.blobServer.listen()
+    console.log(`[tamarind-room] blob server listening`)
+
+    await this.blobServer.listen()
+    console.log(`[tamarind-room] blob server listening`)
+
+    // Append identity to Autobase so remote peers see the display name.
+    await this.room.appendIdentity({ displayName: this.identity.name })
 
     // Tell the renderer about the writer's stable pubkey + display
     // name. Used by GroupChatPanel to label "You" for messages from
@@ -341,6 +359,8 @@ class TamarindRoomWorkerTask extends ReadyResource {
       case 'rename-self':
         this.identity.name = message.name || this.identity.name
         await this._persistIdentity()
+        // Append identity to Autobase so remote peers see the new name.
+        await this.room.appendIdentity({ displayName: this.identity.name })
         // Re-push the `me` event so the renderer's `useRoom.me` updates
         // and the splash's "Signed in as <name>" label reflects the
         // rename immediately. Otherwise `me` stays at its boot-time
@@ -353,6 +373,10 @@ class TamarindRoomWorkerTask extends ReadyResource {
             name: this.identity.name
           })
         )
+        return
+      case 'upload-media':
+        // Handle video upload from renderer
+        await this._handleUploadMedia(message)
         return
       default:
         return
@@ -394,16 +418,71 @@ class TamarindRoomWorkerTask extends ReadyResource {
     }
   }
 
+  async _handleUploadMedia({ boardId, fileName, mimeType, size, data }) {
+    try {
+      // Send progress: starting
+      this.pipe.write(JSON.stringify({ type: 'upload-progress', phase: 'writing', fileName }))
+
+      // Write file to Hyperblobs using put method (per Pear docs)
+      const idEnc = require('hypercore-id-encoding')
+      const buffer = Buffer.from(data)
+      const blobId = await this.blobs.put(buffer)
+
+      // Create blob descriptor per docs
+      const blob = { key: idEnc.normalize(this.blobs.core.key), ...blobId }
+
+      // Send progress: adding to Autobase
+      this.pipe.write(JSON.stringify({ type: 'upload-progress', phase: 'indexing', fileName }))
+
+      // Add media reference to Autobase with blob descriptor
+      await this.room.addMedia({
+        boardId,
+        type: 'video',
+        blob,
+        fileName,
+        mimeType,
+        size
+      })
+
+      // Construct HTTP URL using blobServer.getLink with blob descriptor
+      const videoUrl = this.blobServer.getLink(blob.key, { blob, type: mimeType })
+
+      // Find the video item by fileName and update it
+      const items = await this.room.getItems()
+      const videoItem = items.find(
+        (item) => item.type === 'video' && item.videoFileName === fileName
+      )
+
+      if (videoItem) {
+        await this.room.appendItem({
+          type: 'update-item',
+          id: b4a.toString(videoItem.id, 'hex'),
+          patch: { videoUrl },
+          at: Date.now()
+        })
+        console.log(`[tamarind-room] updated video item with HTTP URL`)
+      } else {
+        console.log(`[tamarind-room] video item not found for ${fileName}`)
+      }
+
+      console.log(`[tamarind-room] uploaded video: ${fileName} (${size} bytes)`)
+    } catch (err) {
+      console.error('[tamarind-room] upload failed:', err)
+      this.pipe.write(JSON.stringify({ type: 'upload-error', fileName, error: err.message }))
+    }
+  }
+
   async _broadcast() {
     try {
       const boards = await this.room.getBoards()
       console.log(
         `[tamarind-room] _broadcast start (peers=${this.peers}, boards=${boards.length}, writable=${this.room.isWritable()})`
       )
-      const [snapshot, messages, aiStatesRaw] = await Promise.all([
+      const [snapshot, messages, aiStatesRaw, identities] = await Promise.all([
         this.room.buildSnapshot(),
         this.room.getMessages(),
-        this.room.getAiStates()
+        this.room.getAiStates(),
+        this.room.getIdentities()
       ])
       messages.sort((a, b) => {
         const aAt = a.info?.at ?? 0
@@ -422,12 +501,19 @@ class TamarindRoomWorkerTask extends ReadyResource {
         loadedAt: s.loadedAt,
         accepting: s.accepting
       }))
+      // Map identities to z32 keys for renderer lookup.
+      const identitiesMap = identities.map((id) => ({
+        writerKey: z32.encode(b4a.from(id.writerKey, 'hex')),
+        displayName: id.displayName,
+        updatedAt: id.updatedAt
+      }))
       console.log(
-        `[tamarind-room] _broadcast emit (boards=${snapshot.boards.length}, items=${snapshot.items.length}, chat=${messages.length}, ai=${aiStates.length})`
+        `[tamarind-room] _broadcast emit (boards=${snapshot.boards.length}, items=${snapshot.items.length}, chat=${messages.length}, ai=${aiStates.length}, identities=${identitiesMap.length})`
       )
       this.pipe.write(JSON.stringify({ type: 'snapshot', state: snapshot }))
       this.pipe.write(JSON.stringify({ type: 'chat', messages }))
       this.pipe.write(JSON.stringify({ type: 'ai-states', states: aiStates }))
+      this.pipe.write(JSON.stringify({ type: 'identities', identities: identitiesMap }))
     } catch (err) {
       this.pipe.write(JSON.stringify({ type: 'status', phase: 'error', error: err.message }))
     }

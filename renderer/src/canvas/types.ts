@@ -3,7 +3,7 @@
 // only the storage layer changes. Phase 3 will mirror this union into
 // a hyperschema/hyperdb/hyperdispatch spec.
 
-export type GenericShapeType = 'rect' | 'ellipse' | 'connector' | 'text' | 'note'
+export type GenericShapeType = 'rect' | 'ellipse' | 'connector' | 'text' | 'note' | 'video'
 export type ShapeType = GenericShapeType
 
 // ── Boards ───────────────────────────────────────────────────────
@@ -133,6 +133,11 @@ export interface BoardScopedItem {
   strokePattern?: 'solid' | 'dashed' | 'dotted'
   curve?: 'straight' | 'bezier'
   label?: ConnectorLabel
+  // Phase 4 video-only fields. Optional; only set when type is 'video'.
+  videoUrl?: string
+  videoFileName?: string
+  videoMimeType?: string
+  videoSize?: number
   // Z-order — assigned at construction by the reducer's monotonic
   // `orderCounter` field on `CanvasState`.
   order: number

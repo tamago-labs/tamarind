@@ -1197,6 +1197,77 @@ export function CanvasPage() {
     [state.activeBoardId, state.boards, state.items, itemsArray, selectedIds, surfaceRef, pan, zoom]
   )
 
+  // Video upload with file size limit (100MB)
+  const handleAddVideo = useCallback(() => {
+    if (!state.activeBoardId) return
+
+    const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
+
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'video/mp4,video/webm,video/ogg'
+    input.style.display = 'none'
+    input.onchange = () => {
+      const file = input.files?.[0]
+      input.remove()
+      if (!file) return
+
+      // Check file size
+      if (file.size > MAX_FILE_SIZE) {
+        setFeedbackBanner({
+          kind: 'error',
+          message: `File too large. Maximum size is 100MB. Your file: ${(file.size / 1024 / 1024).toFixed(1)}MB`
+        })
+        return
+      }
+
+      setFeedbackBanner({
+        kind: 'success',
+        message: `Uploading "${file.name}"...`
+      })
+
+      // Add video item to canvas immediately
+      const { x, y } = computeSpawnWorld()
+      const now = Date.now()
+      const id = uid()
+      const videoItem = {
+        id,
+        boardId: state.activeBoardId!,
+        type: 'video' as const,
+        x,
+        y,
+        w: 320,
+        h: 240,
+        stroke: DEFAULT_STROKE,
+        strokeWidth: DEFAULT_STROKE_WIDTH,
+        fill: '#000000',
+        videoFileName: file.name,
+        videoMimeType: file.type,
+        videoSize: file.size,
+        order: 0,
+        updatedAt: now
+      }
+      dispatchAction({ type: 'add-item', item: videoItem })
+      setSelectedIds(new Set([id]))
+
+      // Upload to worker
+      const reader = new FileReader()
+      reader.onload = () => {
+        const buffer = new Uint8Array(reader.result as ArrayBuffer)
+        room.uploadMedia({
+          boardId: state.activeBoardId!,
+          fileName: file.name,
+          mimeType: file.type,
+          size: file.size,
+          data: buffer
+        })
+      }
+      reader.readAsArrayBuffer(file)
+    }
+    document.body.appendChild(input)
+    input.click()
+  }, [state.activeBoardId, room.uploadMedia, computeSpawnWorld, dispatchAction, setSelectedIds])
+
   const handleExportSvg = useCallback(() => {
     void exportBoard('svg')
   }, [exportBoard])
@@ -1375,6 +1446,7 @@ export function CanvasPage() {
         role={room.role}
         peers={room.peers}
         onOpenKnowledgeBase={() => setKnowledgeBaseOpen(true)}
+        onAddVideo={handleAddVideo}
       />
       {feedbackBanner && (
         <div
@@ -1422,6 +1494,7 @@ export function CanvasPage() {
                 role={room.role}
                 writable={room.writable}
                 me={room.me}
+                identities={room.identities}
                 onSendChat={room.sendChat}
                 onRemoveChat={(id) => room.removeChats([id])}
                 onClearChat={room.clearChat}

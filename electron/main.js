@@ -268,7 +268,8 @@ async function createWindow() {
       preload: path.join(__dirname, '..', 'electron', 'preload.js'),
       sandbox: true,
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      webSecurity: false
     }
   })
 

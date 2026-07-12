@@ -47,6 +47,7 @@ export interface RoomState {
   snapshot: SnapshotState | null
   chat: ChatMessage[]
   peerAiStates: PeerAiState[]
+  identities: Map<string, { displayName: string; updatedAt: number }>
   error: string | null
 }
 
@@ -60,6 +61,7 @@ const initialState: RoomState = {
   snapshot: null,
   chat: [],
   peerAiStates: [],
+  identities: new Map(),
   error: null
 }
 
@@ -113,6 +115,14 @@ function apply(event: RoomEvent) {
       break
     case 'ai-states':
       store.peerAiStates = Array.isArray(event.states) ? event.states : []
+      break
+    case 'identities':
+      store.identities = new Map(
+        (event.identities || []).map((id) => [
+          id.writerKey,
+          { displayName: id.displayName, updatedAt: id.updatedAt }
+        ])
+      )
       break
   }
   bumpAndEmit()
@@ -319,6 +329,21 @@ export function useRoom(): RoomState & {
     })
   }, [])
 
+  const uploadMedia = useCallback(
+    (frame: {
+      boardId: string
+      fileName: string
+      mimeType: string
+      size: number
+      data: Uint8Array
+    }) => {
+      writeRoom({ type: 'upload-media', ...frame }).catch((err) => {
+        console.error('[tamarind] uploadMedia failed:', err)
+      })
+    },
+    []
+  )
+
   const joinInvite = useCallback((invite: string) => {
     // Tells main.js to kill + respawn the room worker with `--invite
     // <code>`. The renderer doesn't wait — the worker exit / restart
@@ -351,11 +376,13 @@ export function useRoom(): RoomState & {
     snapshot: store.snapshot,
     chat: store.chat,
     peerAiStates: store.peerAiStates,
+    identities: store.identities,
     error: store.error,
     sendAction,
     sendChat,
     removeChats,
     clearChat,
+    uploadMedia,
     joinInvite,
     createInvite,
     renameSelf

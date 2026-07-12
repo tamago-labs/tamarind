@@ -28,6 +28,7 @@ import {
   Undo2,
   Upload,
   UserPlus,
+  Video,
   ZoomIn,
   ZoomOut
 } from 'lucide-react'
@@ -95,6 +96,8 @@ interface CanvasToolbarProps {
   peers: number
   // Knowledge Base
   onOpenKnowledgeBase: () => void
+  // Video upload
+  onAddVideo: () => void
 }
 
 const SHORTCUT_HINT = 'Cmd/Ctrl+Z to undo · Cmd/Ctrl+Shift+Z to redo · Cmd/Ctrl+A to select all'
@@ -241,7 +244,8 @@ export function CanvasToolbar({
   invite,
   role,
   peers,
-  onOpenKnowledgeBase
+  onOpenKnowledgeBase,
+  onAddVideo
 }: CanvasToolbarProps) {
   const [showInvite, setShowInvite] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -454,6 +458,19 @@ export function CanvasToolbar({
           <Database className='h-4 w-4' aria-hidden='true' />
           KB
         </button>
+
+        {/* ── Video upload button (disabled - TODO: implement local storage) ── */}
+        {/*
+        <button
+          type='button'
+          onClick={onAddVideo}
+          aria-label='Add video'
+          title='Add video to canvas'
+          className='inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-gray-700 transition hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500'
+        >
+          <Video className='h-4 w-4' aria-hidden='true' />
+        </button>
+        */}
       </div>
     </header>
   )
