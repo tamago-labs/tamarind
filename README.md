@@ -125,16 +125,31 @@ Local AI is integrated directly into the tactical workflow.
 - Streaming chat with persistent conversation history.
 - Local or Host inference modes.
 - P2P AI relay allows teammates to use another peer's loaded model without downloading a model themselves.
+- **Prompt-to-Canvas** — AI can create shapes on the canvas from chat prompts.
+- **Knowledge Base** — RAG-powered document search for instant access to stored information.
 - Complete IPC pipeline connecting the Electron renderer to the QVAC SDK running in the main process.
+
+### Canvas Features
+
+Enhanced canvas capabilities for tactical planning.
+
+- **Identity** — Persistent display names across sessions and peers.
+- **Video** — Upload and display videos on the canvas (50MB limit).
+- **Prompt-to-Canvas** — AI can create shapes on the canvas from chat prompts.
+- **Knowledge Base** — RAG-powered document search for instant access to stored information.
+- **Sticky Notes** — First-class sticky note shape type for quick annotations.
 
 ### Built-in Templates
 
 Ready-to-use templates for common tactical planning scenarios.
 
-- Football pitch
-- Basketball half-court
-- Sales pipeline
-- Hackathon system architecture
+- **Football** — 4-4-2, 4-3-3, Corner Kick, Free Kick, Blank Pitch
+- **Basketball** — 2-3 Zone, Blank Court
+- **Marketing** — SWOT, Funnel, User Journey
+- **Product** — Roadmap, Prioritization, Story Map, Lean Canvas
+- **Strategy** — BMC, Quarterly Planning, OKRs
+- **Startup** — Idea Canvas, Pitch Flow, MVP Planning, Task Board
+- **General** — Flowchart, Kanban, Timeline
 
 Each template is generated as editable canvas objects rather than static images, allowing teams to immediately modify every element after insertion.
 
@@ -142,41 +157,40 @@ Each template is generated as editable canvas objects rather than static images,
 
 ## Currently in Development
 
+### Portable Identity (24-Word Mnemonic)
+
+Enable portable identity across devices using a 24-word mnemonic phrase. Users can export their identity and import it on another device, maintaining their display name and settings.
+
+Reference: [Add Keet identity to a chat app](https://docs.pears.com/how-to/manage-identity/add-keet-identity-to-a-chat-app/)
+
 ### Cross-Network P2P
 
-Current collaboration is optimized for peers on the same local network. We're extending the networking layer to support seamless peer-to-peer collaboration across the public internet while keeping the same decentralized architecture.
+Extending the networking layer to support seamless peer-to-peer collaboration across:
+- **Corporate networks** — Behind firewalls and NATs
+- **Mobile networks** — Cellular data connections
+- **Public internet** — Across different ISPs
 
-### AI Tactical Coach
+Reference: [Connect two peers by key with HyperDHT](https://docs.pears.com/how-to/connect-to-peers/connect-two-peers-by-key-with-hyperdht/)
 
-The current release focuses on AI chat. Next, we're enabling AI to interact directly with the whiteboard using tools.
+### Enhanced Video Sharing
 
-Planned capabilities include:
-
-- Generate complete tactical diagrams from prompts.
-- Create, position, and connect canvas objects automatically.
-- Annotate existing boards with tactical recommendations.
-- Analyze formations and identify weaknesses.
-- Suggest improvements based on the current board state.
-
-### Expanded Template Library
-
-We're extending Tamarind beyond the current four templates with additional tactical layouts for:
-
-- Basketball
-- Volleyball
-- Rugby
-- Baseball
-- Engineering architecture
-- Incident response
-- Product planning
-- Business strategy
+Current video upload stores files locally. Planned enhancement:
+- P2P video sync via Hyperblobs
+- Peer-to-peer video streaming
+- Collaborative video annotations
 
 ### Collaboration Enhancements
 
-Additional capabilities planned during the hackathon include:
+Additional capabilities planned:
 
 - Live cursor presence.
 - Snap-to-grid and smart alignment.
+- Group and ungroup objects.
+- Lock and hide objects.
+- Context menus.
+- Multi-room hosting with independent collaboration sessions.
+- Portable writer identities across devices.
+- Shared AI preferences replicated through Autobase.
 - Group and ungroup objects.
 - Lock and hide objects.
 - Context menus.
