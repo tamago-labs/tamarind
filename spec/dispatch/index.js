@@ -25,8 +25,10 @@ class Router {
     this._handler14 = null
     this._handler15 = null
     this._handler16 = null
+    this._handler17 = null
+    this._handler18 = null
 
-    this._missing = 17
+    this._missing = 19
   }
 
   add (name, handler) {
@@ -82,6 +84,12 @@ class Router {
       case '@tamarind/relay-cancel':
         this._handler16 = handler
         break
+      case '@tamarind/update-identity':
+        this._handler17 = handler
+        break
+      case '@tamarind/add-media':
+        this._handler18 = handler
+        break
       default:
         throw DispatchError.NONEXISTENT_ROUTE(name)
     }
@@ -106,6 +114,8 @@ class Router {
     assert(this._handler14 !== null, 'Missing handler for "@tamarind/relay-request"')
     assert(this._handler15 !== null, 'Missing handler for "@tamarind/relay-response"')
     assert(this._handler16 !== null, 'Missing handler for "@tamarind/relay-cancel"')
+    assert(this._handler17 !== null, 'Missing handler for "@tamarind/update-identity"')
+    assert(this._handler18 !== null, 'Missing handler for "@tamarind/add-media"')
   }
 
   async dispatch (message, context) {
@@ -152,6 +162,10 @@ class Router {
         return this._handler15(op.value, context)
       case 16:
         return this._handler16(op.value, context)
+      case 17:
+        return this._handler17(op.value, context)
+      case 18:
+        return this._handler18(op.value, context)
       default:
         throw DispatchError.HANDLER_NOT_FOUND_BY_ID(op.id)
     }
@@ -287,6 +301,18 @@ const route16 = {
   enc: getEncoding('@tamarind/relay-cancel')
 }
 
+const route17 = {
+  name: '@tamarind/update-identity',
+  id: 17,
+  enc: getEncoding('@tamarind/identity')
+}
+
+const route18 = {
+  name: '@tamarind/add-media',
+  id: 18,
+  enc: getEncoding('@tamarind/media')
+}
+
 function getRouteByName (name) {
   switch (name) {
     case '@tamarind/add-writer':
@@ -323,6 +349,10 @@ function getRouteByName (name) {
       return route15
     case '@tamarind/relay-cancel':
       return route16
+    case '@tamarind/update-identity':
+      return route17
+    case '@tamarind/add-media':
+      return route18
     default:
       throw DispatchError.ROUTE_NOT_FOUND_BY_NAME(name)
   }
@@ -364,6 +394,10 @@ function getRouteById (id) {
       return route15
     case 16:
       return route16
+    case 17:
+      return route17
+    case 18:
+      return route18
     default:
       throw DispatchError.HANDLER_NOT_FOUND_BY_ID(id)
   }

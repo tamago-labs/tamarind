@@ -103,6 +103,18 @@
       "name": "@tamarind/relay-cancel",
       "requestType": "@tamarind/relay-cancel",
       "version": 1
+    },
+    {
+      "id": 17,
+      "name": "@tamarind/update-identity",
+      "requestType": "@tamarind/identity",
+      "version": 1
+    },
+    {
+      "id": 18,
+      "name": "@tamarind/add-media",
+      "requestType": "@tamarind/media",
+      "version": 1
     }
   ]
 }

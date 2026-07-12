@@ -108,7 +108,11 @@ const encoding3 = {
       (m.curve ? 2048 : 0) |
       (m.label ? 4096 : 0) |
       (m.textAlign ? 8192 : 0) |
-      (m.textAlignVertical ? 16384 : 0)
+      (m.textAlignVertical ? 16384 : 0) |
+      (m.videoUrl ? 32768 : 0) |
+      (m.videoFileName ? 65536 : 0) |
+      (m.videoMimeType ? 131072 : 0) |
+      (m.videoSize ? 262144 : 0)
 
     c.buffer.preencode(state, m.id)
     c.buffer.preencode(state, m.boardId)
@@ -134,6 +138,10 @@ const encoding3 = {
     if (m.label) c.string.preencode(state, m.label)
     if (m.textAlign) c.string.preencode(state, m.textAlign)
     if (m.textAlignVertical) c.string.preencode(state, m.textAlignVertical)
+    if (m.videoUrl) c.string.preencode(state, m.videoUrl)
+    if (m.videoFileName) c.string.preencode(state, m.videoFileName)
+    if (m.videoMimeType) c.string.preencode(state, m.videoMimeType)
+    if (m.videoSize) c.int.preencode(state, m.videoSize)
     c.int.preencode(state, m.order)
     c.int.preencode(state, m.updatedAt)
   },
@@ -153,7 +161,11 @@ const encoding3 = {
       (m.curve ? 2048 : 0) |
       (m.label ? 4096 : 0) |
       (m.textAlign ? 8192 : 0) |
-      (m.textAlignVertical ? 16384 : 0)
+      (m.textAlignVertical ? 16384 : 0) |
+      (m.videoUrl ? 32768 : 0) |
+      (m.videoFileName ? 65536 : 0) |
+      (m.videoMimeType ? 131072 : 0) |
+      (m.videoSize ? 262144 : 0)
 
     c.buffer.encode(state, m.id)
     c.buffer.encode(state, m.boardId)
@@ -179,6 +191,10 @@ const encoding3 = {
     if (m.label) c.string.encode(state, m.label)
     if (m.textAlign) c.string.encode(state, m.textAlign)
     if (m.textAlignVertical) c.string.encode(state, m.textAlignVertical)
+    if (m.videoUrl) c.string.encode(state, m.videoUrl)
+    if (m.videoFileName) c.string.encode(state, m.videoFileName)
+    if (m.videoMimeType) c.string.encode(state, m.videoMimeType)
+    if (m.videoSize) c.int.encode(state, m.videoSize)
     c.int.encode(state, m.order)
     c.int.encode(state, m.updatedAt)
   },
@@ -213,6 +229,10 @@ const encoding3 = {
       label: (flags & 4096) !== 0 ? c.string.decode(state) : null,
       textAlign: (flags & 8192) !== 0 ? c.string.decode(state) : null,
       textAlignVertical: (flags & 16384) !== 0 ? c.string.decode(state) : null,
+      videoUrl: (flags & 32768) !== 0 ? c.string.decode(state) : null,
+      videoFileName: (flags & 65536) !== 0 ? c.string.decode(state) : null,
+      videoMimeType: (flags & 131072) !== 0 ? c.string.decode(state) : null,
+      videoSize: (flags & 262144) !== 0 ? c.int.decode(state) : 0,
       order: c.int.decode(state),
       updatedAt: c.int.decode(state)
     }
@@ -559,6 +579,80 @@ const encoding17 = {
   }
 }
 
+// @tamarind/identity
+const encoding18 = {
+  preencode(state, m) {
+    c.buffer.preencode(state, m.writerKey)
+    c.string.preencode(state, m.displayName)
+    c.int.preencode(state, m.updatedAt)
+  },
+  encode(state, m) {
+    c.buffer.encode(state, m.writerKey)
+    c.string.encode(state, m.displayName)
+    c.int.encode(state, m.updatedAt)
+  },
+  decode(state) {
+    const r0 = c.buffer.decode(state)
+    const r1 = c.string.decode(state)
+    const r2 = c.int.decode(state)
+
+    return {
+      writerKey: r0,
+      displayName: r1,
+      updatedAt: r2
+    }
+  }
+}
+
+// @tamarind/media
+const encoding19 = {
+  preencode(state, m) {
+    c.buffer.preencode(state, m.id)
+    c.buffer.preencode(state, m.boardId)
+    c.string.preencode(state, m.type)
+    c.json.preencode(state, m.blob)
+    c.string.preencode(state, m.fileName)
+    c.string.preencode(state, m.mimeType)
+    c.int.preencode(state, m.size)
+    c.int.preencode(state, m.createdAt)
+    c.buffer.preencode(state, m.createdBy)
+  },
+  encode(state, m) {
+    c.buffer.encode(state, m.id)
+    c.buffer.encode(state, m.boardId)
+    c.string.encode(state, m.type)
+    c.json.encode(state, m.blob)
+    c.string.encode(state, m.fileName)
+    c.string.encode(state, m.mimeType)
+    c.int.encode(state, m.size)
+    c.int.encode(state, m.createdAt)
+    c.buffer.encode(state, m.createdBy)
+  },
+  decode(state) {
+    const r0 = c.buffer.decode(state)
+    const r1 = c.buffer.decode(state)
+    const r2 = c.string.decode(state)
+    const r3 = c.json.decode(state)
+    const r4 = c.string.decode(state)
+    const r5 = c.string.decode(state)
+    const r6 = c.int.decode(state)
+    const r7 = c.int.decode(state)
+    const r8 = c.buffer.decode(state)
+
+    return {
+      id: r0,
+      boardId: r1,
+      type: r2,
+      blob: r3,
+      fileName: r4,
+      mimeType: r5,
+      size: r6,
+      createdAt: r7,
+      createdBy: r8
+    }
+  }
+}
+
 function setVersion(v) {
   version = v
 }
@@ -618,6 +712,10 @@ function getEncoding(name) {
       return encoding16
     case '@tamarind/relay-cancel':
       return encoding17
+    case '@tamarind/identity':
+      return encoding18
+    case '@tamarind/media':
+      return encoding19
     default:
       throw new Error('Encoder not found ' + name)
   }
