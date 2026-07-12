@@ -16,6 +16,7 @@ import {
   Check,
   Circle,
   Copy,
+  Database,
   Download,
   MousePointerSquareDashed,
   Redo2,
@@ -322,17 +323,15 @@ export function CanvasToolbar({
         </IconButton>
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 
-        {/* ── Tools (marquee + shape palette + templates) ────────── */}
+        {/* ── Tools (select + shapes + templates) ────────────────── */}
         <MomentaryButton
-          label='Marquee select (hold and drag on canvas)'
+          label='Select (hold and drag on canvas)'
           active={marqueeActive}
           onPressStart={onMarqueePressStart}
           onPressEnd={onMarqueePressEnd}
         >
           <MousePointerSquareDashed className='h-4 w-4' aria-hidden='true' />
         </MomentaryButton>
-
-        <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 
         <ShapeButton label='Add rectangle' onClick={() => onAddShape('rect')}>
           <Square className='h-4 w-4' aria-hidden='true' />
@@ -354,19 +353,16 @@ export function CanvasToolbar({
           <Type className='h-4 w-4' aria-hidden='true' />
         </ShapeButton>
 
-        <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
-
         <IconButton label='Templates' onClick={onOpenTemplates}>
           <BookText className='h-4 w-4' aria-hidden='true' />
         </IconButton>
+
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 
-        {/* ── Selection / History ────────────────────────────────── */}
+        {/* ── Actions (delete + undo/redo) ────────────────────────── */}
         <IconButton label='Delete selected' onClick={onDelete} disabled={!hasSelection}>
           <Trash2 className='h-4 w-4' aria-hidden='true' />
         </IconButton>
-
-        <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
 
         <IconButton
           label={`Undo (Cmd/Ctrl+Z)${canUndo ? '' : ' — nothing to undo'}`}
@@ -383,8 +379,9 @@ export function CanvasToolbar({
           <Redo2 className='h-4 w-4' aria-hidden='true' />
         </IconButton>
 
-        {/* ── Invite button + popover ────────────────────────────── */}
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
+
+        {/* ── Invite + Knowledge Base ────────────────────────────── */}
         <div ref={inviteRef} className='relative'>
           <button
             type='button'
@@ -445,7 +442,7 @@ export function CanvasToolbar({
           )}
         </div>
 
-        {/* ── Knowledge Base button ────────────────────────────── */}
+        {/* ── KB button ────────────────────────────── */}
         <div className='mx-2 h-5 w-px bg-gray-300' aria-hidden='true' />
         <button
           type='button'
@@ -454,7 +451,8 @@ export function CanvasToolbar({
           title='Knowledge Base'
           className='inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-gray-700 transition hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500'
         >
-          Knowledge Base
+          <Database className='h-4 w-4' aria-hidden='true' />
+          KB
         </button>
       </div>
     </header>
