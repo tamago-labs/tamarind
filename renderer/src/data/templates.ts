@@ -234,63 +234,11 @@ const FOOTBALL_CORNER: Template = {
   items: footballCornerItems
 }
 
-const FOOTBALL_FREEKICK: Template = {
-  id: 'football-freekick',
-  category: 'football',
-  name: 'Free Kick Planner',
-  description: 'Set piece layout for free kicks',
-  build: () => {
-    const items: BoardScopedItem[] = []
-    const pitchX = 40,
-      pitchY = 40,
-      pitchW = 520,
-      pitchH = 360
-
-    items.push(rect(pitchX, pitchY, pitchW, pitchH, { fill: '#86efac', order: ORDER.background }))
-    // Penalty area
-    items.push(
-      rect(pitchX + pitchW - 180, pitchY + pitchH / 2 - 90, 180, 180, {
-        fill: 'none',
-        order: ORDER.markings
-      })
-    )
-    // Goal
-    items.push(
-      rect(pitchX + pitchW - 10, pitchY + pitchH / 2 - 30, 10, 60, {
-        fill: '#ffffff',
-        order: ORDER.markings
-      })
-    )
-    // Ball position
-    items.push({
-      ...ellipse(pitchX + pitchW - 200, pitchY + pitchH / 2, 16, 16, { fill: '#ffffff' }),
-      order: ORDER.shapes
-    })
-    // Wall (defenders)
-    for (let i = 0; i < 4; i++) {
-      items.push(
-        ellipse(pitchX + pitchW - 160, pitchY + pitchH / 2 - 40 + i * 25, 20, 20, {
-          fill: '#ef4444'
-        })
-      )
-    }
-    // Taker
-    items.push(ellipse(pitchX + pitchW - 220, pitchY + pitchH / 2 - 10, 28, 28, { text: 'Taker' }))
-
-    items.push(note(580, 40, 160, 80, { text: 'Primary taker' }))
-    items.push(note(580, 130, 160, 80, { text: 'Dummy run' }))
-    items.push(note(580, 220, 160, 80, { text: 'Wall positioning' }))
-    items.push(note(580, 310, 160, 80, { text: 'Rebound responsibility' }))
-
-    return items
-  }
-}
-
 const FOOTBALL_BLANK: Template = {
   id: 'football-blank',
   category: 'football',
   name: 'Blank Football Pitch',
-  description: 'An empty football pitch ready for custom tactics and formations.',
+  description: 'An empty football pitch.',
   build: () => {
     const items: BoardScopedItem[] = []
 
@@ -781,53 +729,6 @@ const STARTUP_IDEA: Template = {
   }
 }
 
-const STARTUP_CRAZY8: Template = {
-  id: 'startup-crazy8',
-  category: 'startup',
-  name: 'Crazy 8s',
-  description: 'Rapid ideation sketching',
-  build: () => {
-    const items: BoardScopedItem[] = []
-
-    items.push(text(60, 30, 400, 40, 'Crazy 8s', 24))
-    items.push(text(60, 80, 500, 30, 'One idea per minute', 14))
-    // 8 boxes for sketching
-    for (let i = 0; i < 8; i++) {
-      const x = 60 + (i % 4) * 140
-      const y = 130 + Math.floor(i / 4) * 130
-      items.push(rect(x, y, 120, 110, { fill: '#f3f4f6' }))
-    }
-
-    return items
-  }
-}
-
-const STARTUP_ARCHITECTURE: Template = {
-  id: 'startup-architecture',
-  category: 'startup',
-  name: 'System Architecture',
-  description: 'High-level tech architecture diagram',
-  build: () => {
-    const items: BoardScopedItem[] = []
-    const boxW = 140,
-      boxH = 70
-
-    items.push(text(60, 30, 400, 40, 'System Architecture', 24))
-    // Components
-    items.push(rect(60, 100, boxW, boxH, { fill: '#ddd6fe', text: 'Frontend' }))
-    items.push(rect(260, 100, boxW, boxH, { fill: '#bfdbfe', text: 'Backend' }))
-    items.push(rect(160, 220, boxW, boxH, { fill: '#bbf7d0', text: 'Database' }))
-    items.push(rect(360, 220, boxW, boxH, { fill: '#fed7aa', text: 'External APIs' }))
-    // Arrows
-    items.push(connector(200, 170, 260, 170))
-    items.push(connector(200, 170, 160, 220))
-    items.push(connector(330, 170, 230, 220))
-    items.push(connector(330, 170, 360, 220))
-
-    return items
-  }
-}
-
 const STARTUP_PITCH: Template = {
   id: 'startup-pitch',
   category: 'startup',
@@ -998,7 +899,6 @@ export const TEMPLATES: Template[] = [
   FOOTBALL_442,
   FOOTBALL_433,
   FOOTBALL_CORNER,
-  FOOTBALL_FREEKICK,
   FOOTBALL_BLANK,
   // Basketball
   BASKETBALL_ZONE,
@@ -1018,8 +918,6 @@ export const TEMPLATES: Template[] = [
   STRATEGY_OKRS,
   // Startup
   STARTUP_IDEA,
-  STARTUP_CRAZY8,
-  STARTUP_ARCHITECTURE,
   STARTUP_PITCH,
   STARTUP_MVP,
   STARTUP_TASKBOARD,
