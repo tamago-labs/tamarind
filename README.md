@@ -73,18 +73,22 @@ npm run make       # Build platform installers
 
 For production P2P distribution and multisig releases, Tamarind follows the standard **Pear Runtime** workflow (`pear build`, `pear stage`, `pear provision`, and `pear multisig`).
 
-## What's Available Now
+## Core Features
 
 ### Offline Tactical Whiteboard
 
 The canvas is designed for tactical planning rather than generic diagramming, with deterministic synchronization across peers.
 
-- Four object types: **rectangle**, **ellipse**, **connector**, and **first-class text** with in-place double-click editing.
+- Five object types: **rectangle**, **ellipse**, **connector**, **first-class text** with in-place double-click editing, and **sticky notes** for quick annotations.
 - Figma-style connector workflow with five connection ports per shape, bezier or straight routing, configurable arrows, stroke styles, labels, and snap previews.
 - Rich editing tools including drag, resize, marquee selection, z-order, per-object styling, and connector configuration.
 - Deterministic connector attachment that automatically follows connected shapes during movement and safely orphans connectors when shapes are removed.
 - High-frequency local rendering during drag operations with commit-on-release replication, reducing unnecessary network traffic.
 - SVG and PNG export with selection-aware rendering, plus board backup and restore.
+- Persistent display names across sessions and peers (Identity).
+- Video upload and display on the canvas (50MB limit).
+- **Prompt-to-Canvas** — AI can create shapes on the canvas from chat prompts.
+- **Knowledge Base** — RAG-powered document search for instant access to stored information.
 
 ### Multi-Board Workspace
 
@@ -129,16 +133,6 @@ Local AI is integrated directly into the tactical workflow.
 - **Prompt-to-Canvas** — AI can create shapes on the canvas from chat prompts.
 - **Knowledge Base** — RAG-powered document search for instant access to stored information.
 - Complete IPC pipeline connecting the Electron renderer to the QVAC SDK running in the main process.
-
-### Canvas Features
-
-Enhanced canvas capabilities for tactical planning.
-
-- **Identity** — Persistent display names across sessions and peers.
-- **Video** — Upload and display videos on the canvas (50MB limit).
-- **Prompt-to-Canvas** — AI can create shapes on the canvas from chat prompts.
-- **Knowledge Base** — RAG-powered document search for instant access to stored information.
-- **Sticky Notes** — First-class sticky note shape type for quick annotations.
 
 ### Built-in Templates
 
