@@ -53,6 +53,7 @@ import { CanvasFooter } from './CanvasFooter'
 import { CanvasToolbar, type SelectedTool } from './CanvasToolbar'
 import { PropertiesDrawer } from './PropertiesDrawer'
 import { TemplatesModal } from './TemplatesModal'
+import type { Template } from '../data/templates'
 import { KnowledgeBaseModal } from './KnowledgeBaseModal'
 import { SlideInPanel } from './SlideInPanel'
 import { FloatingChatButton } from './FloatingChatButton'
@@ -471,6 +472,10 @@ export function CanvasPage() {
   const itemsArray = useMemo(
     () => Object.values(state.items).sort((a, b) => a.order - b.order),
     [state.items]
+  )
+  const activeBoardItems = useMemo(
+    () => itemsArray.filter((it) => it.boardId === state.activeBoardId),
+    [itemsArray, state.activeBoardId]
   )
   const visibleItemIds = useMemo(
     () => itemsArray.filter((it) => it.boardId === state.activeBoardId).map((it) => it.id),
@@ -983,9 +988,15 @@ export function CanvasPage() {
   // `add-items` bulk action (which goes through `useRoom.sendAction` so
   // peers echo the same items via the Autobase snapshot).
   const handleInsertTemplate = useCallback(
-    (templateItems: BoardScopedItem[]) => {
+    (template: Template) => {
       if (!state.activeBoardId) return
       const now = Date.now()
+
+      // Get items from either build() or static items
+      const templateItems = template.build
+        ? template.build(state.activeBoardId, now)
+        : template.items || []
+
       const stamped = templateItems.map((it) => ({
         ...it,
         id: uid(),
@@ -1454,7 +1465,7 @@ export function CanvasPage() {
             />
             <CanvasOverlay
               showPorts={selectedTool === 'connector'}
-              items={itemsArray}
+              items={activeBoardItems}
               hoverShapeId={hoverShapeId}
               zoom={zoom}
               draft={draft}
@@ -1463,7 +1474,7 @@ export function CanvasPage() {
           <Marquee
             surfaceRef={surfaceRef}
             zoom={zoom}
-            items={itemsArray}
+            items={activeBoardItems}
             itemsById={itemsById}
             enabled={marqueeMode}
             onCommit={(ids) => setSelectedIds(new Set(ids))}

@@ -21,6 +21,16 @@ import {
   type ConnectorEnd
 } from '../canvas/types'
 
+// JSON-based templates
+import football442 from './templates/football-4-4-2.json'
+import football433 from './templates/football-4-3-3.json'
+import footballCorner from './templates/football-corner.json'
+
+// Cast JSON items to BoardScopedItem type
+const football442Items = football442.items as unknown as BoardScopedItem[]
+const football433Items = football433.items as unknown as BoardScopedItem[]
+const footballCornerItems = footballCorner.items as unknown as BoardScopedItem[]
+
 // ── Ordering constants ──────────────────────────────────────────
 
 export const ORDER = {
@@ -44,7 +54,9 @@ export interface Template {
   category: string
   name: string
   description: string
-  build: (boardId: string, now: number) => BoardScopedItem[]
+  // Hybrid: either build function OR static items from JSON
+  build?: (boardId: string, now: number) => BoardScopedItem[]
+  items?: BoardScopedItem[]
 }
 
 export const CATEGORIES: TemplateCategory[] = [
@@ -203,53 +215,7 @@ const FOOTBALL_442: Template = {
   category: 'football',
   name: '4-4-2 Formation',
   description: 'Classic balanced formation with two strikers',
-  build: () => {
-    const items: BoardScopedItem[] = []
-    const pitchX = 40,
-      pitchY = 40,
-      pitchW = 520,
-      pitchH = 360
-
-    // Pitch
-    items.push(rect(pitchX, pitchY, pitchW, pitchH, { fill: '#86efac', order: ORDER.background }))
-    // Center line
-    items.push(
-      connector(pitchX + pitchW / 2, pitchY, pitchX + pitchW / 2, pitchY + pitchH, {
-        arrowEnd: 'none'
-      })
-    )
-    // Center circle
-    items.push({
-      ...ellipse(pitchX + pitchW / 2 - 40, pitchY + pitchH / 2 - 40, 80, 80, { fill: 'none' }),
-      order: ORDER.markings
-    })
-
-    // Players (4-4-2)
-    const players: [number, number, string][] = [
-      [pitchX + pitchW / 2, pitchY + pitchH - 30, 'GK'],
-      [pitchX + 80, pitchY + pitchH - 100, 'LB'],
-      [pitchX + pitchW / 2 - 60, pitchY + pitchH - 100, 'CB'],
-      [pitchX + pitchW / 2 + 60, pitchY + pitchH - 100, 'CB'],
-      [pitchX + pitchW - 80, pitchY + pitchH - 100, 'RB'],
-      [pitchX + 80, pitchY + pitchH / 2, 'LM'],
-      [pitchX + pitchW / 2 - 60, pitchY + pitchH / 2, 'CM'],
-      [pitchX + pitchW / 2 + 60, pitchY + pitchH / 2, 'CM'],
-      [pitchX + pitchW - 80, pitchY + pitchH / 2, 'RM'],
-      [pitchX + pitchW / 2 - 60, pitchY + 80, 'ST'],
-      [pitchX + pitchW / 2 + 60, pitchY + 80, 'ST']
-    ]
-    for (const [x, y, label] of players) {
-      items.push(ellipse(x - 18, y - 18, 36, 36, { text: label }))
-    }
-
-    // Sticky notes
-    items.push(note(580, 40, 160, 80, { text: 'Press high after losing possession' }))
-    items.push(note(580, 130, 160, 80, { text: 'Full-backs overlap on attack' }))
-    items.push(note(580, 220, 160, 80, { text: 'Compact defensive shape' }))
-    items.push(note(580, 310, 160, 80, { text: 'Target striker holds up play' }))
-
-    return items
-  }
+  items: football442Items
 }
 
 const FOOTBALL_433: Template = {
@@ -257,48 +223,7 @@ const FOOTBALL_433: Template = {
   category: 'football',
   name: '4-3-3 Formation',
   description: 'Attacking width with wingers',
-  build: () => {
-    const items: BoardScopedItem[] = []
-    const pitchX = 40,
-      pitchY = 40,
-      pitchW = 520,
-      pitchH = 360
-
-    items.push(rect(pitchX, pitchY, pitchW, pitchH, { fill: '#86efac', order: ORDER.background }))
-    items.push(
-      connector(pitchX + pitchW / 2, pitchY, pitchX + pitchW / 2, pitchY + pitchH, {
-        arrowEnd: 'none'
-      })
-    )
-    items.push({
-      ...ellipse(pitchX + pitchW / 2 - 40, pitchY + pitchH / 2 - 40, 80, 80, { fill: 'none' }),
-      order: ORDER.markings
-    })
-
-    const players: [number, number, string][] = [
-      [pitchX + pitchW / 2, pitchY + pitchH - 30, 'GK'],
-      [pitchX + 80, pitchY + pitchH - 100, 'LB'],
-      [pitchX + pitchW / 2 - 60, pitchY + pitchH - 100, 'CB'],
-      [pitchX + pitchW / 2 + 60, pitchY + pitchH - 100, 'CB'],
-      [pitchX + pitchW - 80, pitchY + pitchH - 100, 'RB'],
-      [pitchX + pitchW / 2, pitchY + pitchH / 2 + 40, 'DM'],
-      [pitchX + pitchW / 2 - 80, pitchY + pitchH / 2 - 20, 'CM'],
-      [pitchX + pitchW / 2 + 80, pitchY + pitchH / 2 - 20, 'CM'],
-      [pitchX + 60, pitchY + 80, 'LW'],
-      [pitchX + pitchW / 2, pitchY + 60, 'ST'],
-      [pitchX + pitchW - 60, pitchY + 80, 'RW']
-    ]
-    for (const [x, y, label] of players) {
-      items.push(ellipse(x - 18, y - 18, 36, 36, { text: label }))
-    }
-
-    items.push(note(580, 40, 160, 80, { text: 'Wingers stay wide' }))
-    items.push(note(580, 130, 160, 80, { text: 'DM covers counter attacks' }))
-    items.push(note(580, 220, 160, 80, { text: 'High pressing trigger' }))
-    items.push(note(580, 310, 160, 80, { text: 'Switch play quickly' }))
-
-    return items
-  }
+  items: football433Items
 }
 
 const FOOTBALL_CORNER: Template = {
@@ -306,52 +231,7 @@ const FOOTBALL_CORNER: Template = {
   category: 'football',
   name: 'Corner Kick Planner',
   description: 'Set piece layout for corner kicks',
-  build: () => {
-    const items: BoardScopedItem[] = []
-    const pitchX = 40,
-      pitchY = 40,
-      pitchW = 520,
-      pitchH = 360
-
-    items.push(rect(pitchX, pitchY, pitchW, pitchH, { fill: '#86efac', order: ORDER.background }))
-    // Penalty area
-    items.push(
-      rect(pitchX + pitchW - 180, pitchY + pitchH / 2 - 90, 180, 180, {
-        fill: 'none',
-        order: ORDER.markings
-      })
-    )
-    // Goal
-    items.push(
-      rect(pitchX + pitchW - 10, pitchY + pitchH / 2 - 30, 10, 60, {
-        fill: '#ffffff',
-        order: ORDER.markings
-      })
-    )
-    // Corner arc
-    items.push({
-      ...ellipse(pitchX + pitchW - 20, pitchY + pitchH - 20, 20, 20, { fill: 'none' }),
-      order: ORDER.markings
-    })
-
-    // Players in box
-    const players: [number, number, string][] = [
-      [pitchX + pitchW - 60, pitchY + pitchH / 2 - 40, 'Near'],
-      [pitchX + pitchW - 100, pitchY + pitchH / 2 + 20, 'Far'],
-      [pitchX + pitchW - 140, pitchY + pitchH / 2, 'Edge'],
-      [pitchX + pitchW - 20, pitchY + pitchH - 10, 'Corner']
-    ]
-    for (const [x, y, label] of players) {
-      items.push(ellipse(x - 16, y - 16, 32, 32, { text: label }))
-    }
-
-    items.push(note(580, 40, 160, 80, { text: 'Near-post run' }))
-    items.push(note(580, 130, 160, 80, { text: 'Far-post target' }))
-    items.push(note(580, 220, 160, 80, { text: 'Edge of box rebound' }))
-    items.push(note(580, 310, 160, 80, { text: 'Short corner option' }))
-
-    return items
-  }
+  items: footballCornerItems
 }
 
 const FOOTBALL_FREEKICK: Template = {

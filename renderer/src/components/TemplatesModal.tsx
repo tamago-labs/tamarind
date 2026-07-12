@@ -1,17 +1,17 @@
 // Templates modal. Shows templates organised by category with
-// horizontal tabs. Each category has a 2-per-row grid of templates
+// horizontal tabs. Each category has a 4-per-row grid of templates
 // with thumbnails and Insert buttons.
 
 import { useState } from 'react'
 import { BaseModal } from './BaseModal'
-import type { BoardScopedItem } from '../canvas/types'
 import { TEMPLATES, CATEGORIES } from '../data/templates'
+import type { Template } from '../data/templates'
 import { TemplateThumbnail } from '../data/templatesThumbnails'
 
 export interface TemplatesModalProps {
   open: boolean
   onClose: () => void
-  onInsert: (items: BoardScopedItem[]) => void
+  onInsert: (template: Template) => void
 }
 
 export function TemplatesModal({ open, onClose, onInsert }: TemplatesModalProps) {
@@ -63,7 +63,7 @@ export function TemplatesModal({ open, onClose, onInsert }: TemplatesModalProps)
                 </div>
                 <button
                   type='button'
-                  onClick={() => onInsert(tpl.build('', Date.now()))}
+                  onClick={() => onInsert(tpl)}
                   className='inline-flex h-8 items-center justify-center rounded-md bg-gray-800 px-3 text-xs font-semibold text-white transition hover:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-400'
                 >
                   Insert
