@@ -7,7 +7,7 @@ Internet is the first thing to fail when teams need it most. Stadiums, conferenc
 **Tamarind** is the tactical whiteboard that works anyway — sports teams, sales teams, and hackathon crews plan strategy offline on a shared canvas, sync P2P with the rest of the team using **Pear by Holepunch**, and get AI-powered suggestions to sharpen their approach through **QVAC**, all without the cloud.
 
 - **Offline-first tactical canvas** — Multi-board collaborative workspace with templates for sports, sales, system design, or a blank canvas.
-- **Peer-to-peer collaboration** — **Hyperswarm** peer discovery with an **Autobase** multi-writer log and **HyperDB** replicated state, enabling conflict-free collaboration without centralized infrastructure.
+- **Peer-to-peer collaboration** — **Hyperswarm** peer discovery (powered by **HyperDHT** for internet-wide P2P) with an **Autobase** multi-writer log and **HyperDB** replicated state, enabling conflict-free collaboration across the internet without centralized infrastructure.
 - **Built-in team chat** — Share invite codes and communicate alongside your whiteboard.
 - **Local AI assistant** — Execute **Meta Llama**, **Qwen**, and **Gemma** GGUF models locally through **QVAC**, with peer-to-peer AI relay so teammates can use the host's loaded model without downloading their own.
 - **Tactical whiteboard persistence** — Every board operation is appended to **Hypercore**, providing deterministic replay, backup/restore, SVG/PNG export, and a tamper-evident audit trail.
@@ -99,6 +99,7 @@ A single Tamarind workspace can contain multiple tactical boards.
 Built entirely on the **Pear Runtime** ecosystem.
 
 - Peer discovery through **Hyperswarm** using invite codes.
+- **HyperDHT**-powered internet-wide P2P connectivity across corporate networks, mobile networks, and public internet.
 - Multi-writer synchronization powered by **Autobase** with **HyperDB** replicated views.
 - Encrypted replicated collections for boards, canvas items, chat, invitations, and AI state.
 - Every reducer action is replicated as an append-only operation, allowing new peers to replay history and converge deterministically.
@@ -163,15 +164,6 @@ Enable portable identity across devices using a 24-word mnemonic phrase. Users c
 
 Reference: [Add Keet identity to a chat app](https://docs.pears.com/how-to/manage-identity/add-keet-identity-to-a-chat-app/)
 
-### Cross-Network P2P
-
-Extending the networking layer to support seamless peer-to-peer collaboration across:
-- **Corporate networks** — Behind firewalls and NATs
-- **Mobile networks** — Cellular data connections
-- **Public internet** — Across different ISPs
-
-Reference: [Connect two peers by key with HyperDHT](https://docs.pears.com/how-to/connect-to-peers/connect-two-peers-by-key-with-hyperdht/)
-
 ### Enhanced Video Sharing
 
 Current video upload stores files locally. Planned enhancement:
@@ -185,12 +177,6 @@ Additional capabilities planned:
 
 - Live cursor presence.
 - Snap-to-grid and smart alignment.
-- Group and ungroup objects.
-- Lock and hide objects.
-- Context menus.
-- Multi-room hosting with independent collaboration sessions.
-- Portable writer identities across devices.
-- Shared AI preferences replicated through Autobase.
 - Group and ungroup objects.
 - Lock and hide objects.
 - Context menus.
