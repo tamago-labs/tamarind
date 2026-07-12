@@ -79,7 +79,7 @@ For production P2P distribution and multisig releases, Tamarind follows the stan
 
 The canvas is designed for tactical planning rather than generic diagramming, with deterministic synchronization across peers.
 
-- Five object types: **rectangle**, **ellipse**, **connector**, **first-class text** with in-place double-click editing, and **sticky notes** for quick annotations.
+- Five object types: **rectangle**, **ellipse**, **connector**, **first-class text** with in-place double-click editing, **sticky notes**, and **video** support.
 - Figma-style connector workflow with five connection ports per shape, bezier or straight routing, configurable arrows, stroke styles, labels, and snap previews.
 - Rich editing tools including drag, resize, marquee selection, z-order, per-object styling, and connector configuration.
 - Deterministic connector attachment that automatically follows connected shapes during movement and safely orphans connectors when shapes are removed.
@@ -124,7 +124,7 @@ Communication is integrated directly into the workspace.
 
 Local AI is integrated directly into the tactical workflow.
 
-- Built-in **Qwen3-1.7B** and **Qwen3-4B** models.
+- Built-in **Qwen 1.7B**, **Qwen 4B**, **Gemma 4B**, and **Gemma 31B** models.
 - Import custom **GGUF** models from disk or remote URLs.
 - Configurable context size and tool support persisted between sessions.
 - Streaming chat with persistent conversation history.
@@ -161,12 +161,10 @@ Portable identity across devices using a 24-word mnemonic phrase from Keet.
 Additional capabilities planned:
 
 - Live cursor presence.
-- Snap-to-grid and smart alignment.
 - Group and ungroup objects.
 - Lock and hide objects.
 - Context menus.
 - Multi-room hosting with independent collaboration sessions.
-- Portable writer identities across devices.
 - Shared AI preferences replicated through Autobase.
 
 ## Architecture
