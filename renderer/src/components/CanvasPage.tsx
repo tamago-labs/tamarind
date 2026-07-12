@@ -1197,11 +1197,11 @@ export function CanvasPage() {
     [state.activeBoardId, state.boards, state.items, itemsArray, selectedIds, surfaceRef, pan, zoom]
   )
 
-  // Video upload with file size limit (100MB)
+  // Video upload with file size limit (50MB) - Local storage approach
   const handleAddVideo = useCallback(() => {
     if (!state.activeBoardId) return
 
-    const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
+    const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
 
     const input = document.createElement('input')
     input.type = 'file'
@@ -1216,7 +1216,7 @@ export function CanvasPage() {
       if (file.size > MAX_FILE_SIZE) {
         setFeedbackBanner({
           kind: 'error',
-          message: `File too large. Maximum size is 100MB. Your file: ${(file.size / 1024 / 1024).toFixed(1)}MB`
+          message: `File too large. Maximum size is 50MB. Your file: ${(file.size / 1024 / 1024).toFixed(1)}MB`
         })
         return
       }
@@ -1226,47 +1226,46 @@ export function CanvasPage() {
         message: `Uploading "${file.name}"...`
       })
 
-      // Add video item to canvas immediately
-      const { x, y } = computeSpawnWorld()
-      const now = Date.now()
-      const id = uid()
-      const videoItem = {
-        id,
-        boardId: state.activeBoardId!,
-        type: 'video' as const,
-        x,
-        y,
-        w: 320,
-        h: 240,
-        stroke: DEFAULT_STROKE,
-        strokeWidth: DEFAULT_STROKE_WIDTH,
-        fill: '#000000',
-        videoFileName: file.name,
-        videoMimeType: file.type,
-        videoSize: file.size,
-        order: 0,
-        updatedAt: now
-      }
-      dispatchAction({ type: 'add-item', item: videoItem })
-      setSelectedIds(new Set([id]))
-
-      // Upload to worker
+      // Read file as data URL for local storage
       const reader = new FileReader()
       reader.onload = () => {
-        const buffer = new Uint8Array(reader.result as ArrayBuffer)
-        room.uploadMedia({
+        const dataUrl = reader.result as string
+
+        // Add video item to canvas with data URL
+        const { x, y } = computeSpawnWorld()
+        const now = Date.now()
+        const id = uid()
+        const videoItem = {
+          id,
           boardId: state.activeBoardId!,
-          fileName: file.name,
-          mimeType: file.type,
-          size: file.size,
-          data: buffer
+          type: 'video' as const,
+          x,
+          y,
+          w: 320,
+          h: 240,
+          stroke: DEFAULT_STROKE,
+          strokeWidth: DEFAULT_STROKE_WIDTH,
+          fill: '#000000',
+          videoUrl: dataUrl,
+          videoFileName: file.name,
+          videoMimeType: file.type,
+          videoSize: file.size,
+          order: 0,
+          updatedAt: now
+        }
+        dispatchAction({ type: 'add-item', item: videoItem })
+        setSelectedIds(new Set([id]))
+
+        setFeedbackBanner({
+          kind: 'success',
+          message: `Video "${file.name}" added to canvas!`
         })
       }
-      reader.readAsArrayBuffer(file)
+      reader.readAsDataURL(file)
     }
     document.body.appendChild(input)
     input.click()
-  }, [state.activeBoardId, room.uploadMedia, computeSpawnWorld, dispatchAction, setSelectedIds])
+  }, [state.activeBoardId, computeSpawnWorld, dispatchAction, setSelectedIds])
 
   const handleExportSvg = useCallback(() => {
     void exportBoard('svg')

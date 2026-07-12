@@ -459,18 +459,16 @@ export function CanvasToolbar({
           KB
         </button>
 
-        {/* ── Video upload button (disabled - TODO: implement local storage) ── */}
-        {/*
+        {/* ── Video upload button ────────────────────────────── */}
         <button
           type='button'
           onClick={onAddVideo}
           aria-label='Add video'
-          title='Add video to canvas'
+          title='Add video to canvas (max 50MB)'
           className='inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium text-gray-700 transition hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500'
         >
           <Video className='h-4 w-4' aria-hidden='true' />
         </button>
-        */}
       </div>
     </header>
   )
