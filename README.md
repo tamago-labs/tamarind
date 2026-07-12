@@ -152,18 +152,9 @@ Each template is generated as editable canvas objects rather than static images,
 
 ## Currently in Development
 
-### Portable Identity (24-Word Mnemonic)
+### Keet Identity
 
-Enable portable identity across devices using a 24-word mnemonic phrase. Users can export their identity and import it on another device, maintaining their display name and settings.
-
-Reference: [Add Keet identity to a chat app](https://docs.pears.com/how-to/manage-identity/add-keet-identity-to-a-chat-app/)
-
-### Enhanced Video Sharing
-
-Current video upload stores files locally. Planned enhancement:
-- P2P video sync via Hyperblobs
-- Peer-to-peer video streaming
-- Collaborative video annotations
+Portable identity across devices using a 24-word mnemonic phrase from Keet.
 
 ### Collaboration Enhancements
 
@@ -332,7 +323,7 @@ MIT
 
 ## Credits
 
-Tamarind is built on the open-source P2P stack from [Holepunch](https://holepunch.com):
+Tamarind is built on the open-source P2P stack from [Holepunch](https://holepunch.to/):
 
 - **[hello-pear-electron](https://github.com/holepunchto/hello-pear-electron)** — the upstream Electron + Pear template that Tamarind is forked from
 - **[pear-runtime][pear-runtime]** — P2P runtime that powers application updates
