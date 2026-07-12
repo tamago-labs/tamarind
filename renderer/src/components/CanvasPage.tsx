@@ -990,8 +990,7 @@ export function CanvasPage() {
         ...it,
         id: uid(),
         boardId: state.activeBoardId!,
-        updatedAt: now,
-        order: 0
+        updatedAt: now
       }))
       dispatchAction({ type: 'add-items', items: stamped, at: now })
       setSelectedIds(new Set(stamped.map((it) => it.id)))

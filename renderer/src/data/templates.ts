@@ -410,28 +410,42 @@ const FOOTBALL_BLANK: Template = {
   id: 'football-blank',
   category: 'football',
   name: 'Blank Football Pitch',
-  description: 'Empty field for your own tactics',
+  description: 'An empty football pitch ready for custom tactics and formations.',
   build: () => {
     const items: BoardScopedItem[] = []
-    const pitchX = 40,
-      pitchY = 40,
-      pitchW = 520,
-      pitchH = 360
 
-    items.push(rect(pitchX, pitchY, pitchW, pitchH, { fill: '#86efac', order: ORDER.background }))
+    const pitchX = 40
+    const pitchY = 40
+    const pitchW = 520
+    const pitchH = 360
+
+    // Pitch
+    items.push(
+      rect(pitchX, pitchY, pitchW, pitchH, {
+        fill: '#86efac',
+        order: ORDER.background
+      })
+    )
+
+    // Halfway line
     items.push(
       connector(pitchX + pitchW / 2, pitchY, pitchX + pitchW / 2, pitchY + pitchH, {
         arrowEnd: 'none'
       })
     )
+
+    // Center circle
     items.push({
       ...ellipse(pitchX + pitchW / 2 - 40, pitchY + pitchH / 2 - 40, 80, 80, { fill: 'none' }),
       order: ORDER.markings
     })
-    // Penalty areas
+
+    // Left penalty area
     items.push(
       rect(pitchX, pitchY + pitchH / 2 - 90, 120, 180, { fill: 'none', order: ORDER.markings })
     )
+
+    // Right penalty area
     items.push(
       rect(pitchX + pitchW - 120, pitchY + pitchH / 2 - 90, 120, 180, {
         fill: 'none',
@@ -439,7 +453,24 @@ const FOOTBALL_BLANK: Template = {
       })
     )
 
-    items.push(note(580, 40, 160, 80, { text: 'Team strategy' }))
+    // Left goal area
+    items.push(
+      rect(pitchX, pitchY + pitchH / 2 - 45, 40, 90, { fill: 'none', order: ORDER.markings })
+    )
+
+    // Right goal area
+    items.push(
+      rect(pitchX + pitchW - 40, pitchY + pitchH / 2 - 45, 40, 90, {
+        fill: 'none',
+        order: ORDER.markings
+      })
+    )
+
+    items.push(
+      note(580, 40, 160, 80, {
+        text: 'Team strategy'
+      })
+    )
 
     return items
   }
