@@ -570,12 +570,7 @@ function registerRagIpc() {
   })
 
   ipcMain.handle('rag:fetch-url', async (_evt, args) => {
-    try {
-      const content = await ragStore.fetchUrlContent(args.url)
-      return { success: true, content }
-    } catch (err) {
-      return { success: false, error: err.message }
-    }
+    return ragStore.fetchUrlContent(args.url)
   })
 
   ipcMain.handle('rag:delete', async (_evt, args) => {

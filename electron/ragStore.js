@@ -90,10 +90,26 @@ function getModelStatus() {
 // ─── URL Content Extraction ────────────────────────────────────
 
 function fetchUrlContent(url) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const client = url.startsWith('https') ? https : http
     client
       .get(url, (res) => {
+        // Check for redirect/blocked responses
+        if (res.statusCode >= 300 && res.statusCode < 400) {
+          resolve({
+            success: false,
+            error: `Redirected (${res.statusCode}). The URL may be blocked.`
+          })
+          return
+        }
+        if (res.statusCode !== 200) {
+          resolve({
+            success: false,
+            error: `HTTP ${res.statusCode}. The server may be blocking requests.`
+          })
+          return
+        }
+
         let data = ''
         res.on('data', (chunk) => (data += chunk))
         res.on('end', () => {
@@ -106,10 +122,17 @@ function fetchUrlContent(url) {
           // Get text content
           const text = $('body').text().replace(/\s+/g, ' ').trim()
 
-          resolve(text)
+          if (!text) {
+            resolve({ success: false, error: 'No text content found on this page.' })
+            return
+          }
+
+          resolve({ success: true, content: text })
         })
       })
-      .on('error', reject)
+      .on('error', (err) => {
+        resolve({ success: false, error: `Failed to connect: ${err.message}` })
+      })
   })
 }
 

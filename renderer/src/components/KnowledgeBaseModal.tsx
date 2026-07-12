@@ -9,7 +9,7 @@ interface KnowledgeBaseModalProps {
   onClose: () => void
 }
 
-type ViewMode = 'browse' | 'add-text' | 'add-url' | 'search'
+type ViewMode = 'browse' | 'add-text' | 'add-url' | 'add-url-preview' | 'search'
 
 export function KnowledgeBaseModal({ open, onClose }: KnowledgeBaseModalProps) {
   const [documents, setDocuments] = useState<RagDocument[]>([])
@@ -24,6 +24,14 @@ export function KnowledgeBaseModal({ open, onClose }: KnowledgeBaseModalProps) {
   const [urlContent, setUrlContent] = useState('')
   const [isIngesting, setIsIngesting] = useState(false)
   const [ingestProgress, setIngestProgress] = useState('')
+
+  // URL preview state
+  const [urlPreview, setUrlPreview] = useState<{
+    url: string
+    content: string
+    charCount: number
+  } | null>(null)
+  const [fetchError, setFetchError] = useState('')
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('')
@@ -89,37 +97,71 @@ export function KnowledgeBaseModal({ open, onClose }: KnowledgeBaseModalProps) {
     await loadDocuments()
   }
 
-  async function handleAddUrl() {
+  async function handleFetchUrl() {
     if (!urlContent.trim()) return
 
     setIsIngesting(true)
+    setFetchError('')
     setIngestProgress('Fetching URL content...')
-    const fetchResult = await bridge.rag.fetchUrl({ url: urlContent })
 
-    if (!fetchResult.success || !fetchResult.content) {
+    try {
+      const fetchResult = await bridge.rag.fetchUrl({ url: urlContent })
+
+      if (!fetchResult.success || !fetchResult.content) {
+        setFetchError(
+          fetchResult.error ||
+            'Unable to fetch content from this URL. The server may be blocking automated requests.'
+        )
+        return
+      }
+
+      setUrlPreview({
+        url: urlContent,
+        content: fetchResult.content,
+        charCount: fetchResult.content.length
+      })
+      setViewMode('add-url-preview')
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Failed to fetch URL')
+    } finally {
       setIsIngesting(false)
-      setIngestProgress('Failed to fetch URL')
-      return
+      setIngestProgress('')
     }
+  }
 
-    if (modelStatus !== 'ready') {
-      setIngestProgress('Loading embedding model...')
-      await handleLoadModel()
+  async function handleConfirmAddUrl() {
+    if (!urlPreview) return
+
+    setIsIngesting(true)
+    try {
+      if (modelStatus !== 'ready') {
+        setIngestProgress('Loading embedding model...')
+        await handleLoadModel()
+      }
+
+      setIngestProgress('Ingesting document...')
+      const urlName = new URL(urlPreview.url).hostname
+      const result = await bridge.rag.ingest({
+        name: urlName,
+        content: urlPreview.content,
+        source: 'url'
+      })
+
+      if (!result.success) {
+        setIngestProgress(result.error || 'Ingest failed')
+        return
+      }
+
+      setUrlContent('')
+      setUrlPreview(null)
+      setViewMode('browse')
+      await loadDocuments()
+    } catch (err) {
+      setIngestProgress(err instanceof Error ? err.message : 'Ingest failed')
+    } finally {
+      setIsIngesting(false)
+      setIngestProgress('')
     }
-
-    setIngestProgress('Ingesting document...')
-    const urlName = new URL(urlContent).hostname
-    await bridge.rag.ingest({
-      name: urlName,
-      content: fetchResult.content,
-      source: 'url'
-    })
-
-    setIsIngesting(false)
-    setIngestProgress('')
-    setUrlContent('')
-    setViewMode('browse')
-    await loadDocuments()
   }
 
   async function handleSearch() {
@@ -190,9 +232,9 @@ export function KnowledgeBaseModal({ open, onClose }: KnowledgeBaseModalProps) {
           </div>
         </div>
 
-        {/* Row 2: Buttons (hidden in search mode) */}
+        {/* Row 2: Buttons + Pre-data (hidden in search mode) */}
         {viewMode !== 'search' && (
-          <div className='flex items-center gap-2 border-b border-gray-200 px-4 py-2'>
+          <div className='flex items-center gap-3 border-b border-gray-200 px-4 py-2'>
             <button
               onClick={() => setViewMode('add-text')}
               disabled={isIngesting}
@@ -209,38 +251,33 @@ export function KnowledgeBaseModal({ open, onClose }: KnowledgeBaseModalProps) {
               <Globe className='h-3.5 w-3.5' />
               Add URL
             </button>
-          </div>
-        )}
 
-        {/* Pre-data import section */}
-        {viewMode !== 'search' && preDataCategories.length > 0 && (
-          <div className='border-b border-gray-200 px-4 py-3'>
-            <p className='mb-2 text-xs font-medium text-gray-700'>Pre-loaded Data</p>
-            <div className='flex gap-2'>
-              {preDataCategories.map((cat) => (
-                <div
-                  key={cat.id}
-                  className='flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2'
-                >
-                  <span className='text-sm'>{cat.id.includes('FIFA') ? '⚽' : '📚'}</span>
-                  <div>
-                    <p className='text-xs font-medium text-gray-700'>{cat.name}</p>
-                    <p className='text-[10px] text-gray-500'>{cat.fileCount} files</p>
+            {preDataCategories.length > 0 && (
+              <>
+                <div className='h-4 w-px bg-gray-300' />
+                <span className='text-[10px] text-gray-500'>Pre-loaded:</span>
+                {preDataCategories.map((cat) => (
+                  <div
+                    key={cat.id}
+                    className='flex items-center gap-1.5 rounded-md border border-gray-200 px-2 py-1'
+                  >
+                    <span className='text-xs'>{cat.id.includes('FIFA') ? '⚽' : '📚'}</span>
+                    <span className='text-[10px] text-gray-600'>{cat.name}</span>
+                    {cat.imported ? (
+                      <span className='text-[10px] text-green-600'>✓</span>
+                    ) : (
+                      <button
+                        onClick={() => handleImportPreData(cat.id)}
+                        disabled={isImportingPreData}
+                        className='text-[10px] text-blue-600 hover:text-blue-800 disabled:opacity-50'
+                      >
+                        Import
+                      </button>
+                    )}
                   </div>
-                  {cat.imported ? (
-                    <span className='text-[10px] text-green-600'>✓ Imported</span>
-                  ) : (
-                    <button
-                      onClick={() => handleImportPreData(cat.id)}
-                      disabled={isImportingPreData}
-                      className='rounded-md border border-gray-300 px-2 py-1 text-[10px] text-gray-700 hover:bg-gray-50 disabled:opacity-50'
-                    >
-                      Import
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+                ))}
+              </>
+            )}
           </div>
         )}
 
@@ -327,16 +364,81 @@ export function KnowledgeBaseModal({ open, onClose }: KnowledgeBaseModalProps) {
                   placeholder='https://example.com/article'
                   className='w-full rounded-md border border-gray-300 px-3 py-2 text-xs'
                 />
+
+                {/* Warning message */}
+                <div className='mt-2 rounded-md border border-amber-200 bg-amber-50 p-2'>
+                  <p className='text-[10px] text-amber-700'>
+                    ⚠️ Some websites may block automated requests. If fetching fails, try copying
+                    the content manually using "Add Text" instead.
+                  </p>
+                </div>
+
+                {/* Error message */}
+                {fetchError && (
+                  <div className='mt-2 rounded-md border border-red-200 bg-red-50 p-2'>
+                    <p className='text-[10px] text-red-700'>⚠️ {fetchError}</p>
+                  </div>
+                )}
+
                 <div className='mt-3 flex gap-2'>
                   <button
-                    onClick={handleAddUrl}
+                    onClick={handleFetchUrl}
                     disabled={isIngesting || !urlContent.trim()}
                     className='rounded-md bg-tamarind-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-tamarind-800 disabled:opacity-50'
                   >
-                    {isIngesting ? ingestProgress : 'Fetch & Add'}
+                    {isIngesting ? ingestProgress : 'Fetch'}
                   </button>
                   <button
-                    onClick={() => setViewMode('browse')}
+                    onClick={() => {
+                      setFetchError('')
+                      setViewMode('browse')
+                    }}
+                    className='rounded-md border border-gray-300 px-4 py-1.5 text-xs text-gray-700 hover:bg-gray-50'
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {viewMode === 'add-url-preview' && urlPreview && (
+            <div className='flex-1 overflow-auto p-4'>
+              <div className='mx-auto max-w-xl'>
+                <h3 className='mb-3 text-xs font-medium text-gray-700'>
+                  Add URL Content - Preview
+                </h3>
+                <p className='mb-2 text-[10px] text-gray-500'>URL: {urlPreview.url}</p>
+
+                <div className='rounded-md border border-gray-200 bg-gray-50 p-3'>
+                  <p className='mb-1 text-[10px] font-medium text-gray-600'>Content Preview:</p>
+                  <p className='text-xs text-gray-700 line-clamp-6'>{urlPreview.content}</p>
+                  <p className='mt-2 text-[10px] text-gray-500'>
+                    Full content: {urlPreview.charCount?.toLocaleString() ?? '0'} characters
+                  </p>
+                </div>
+
+                <div className='mt-3 flex gap-2'>
+                  <button
+                    onClick={handleConfirmAddUrl}
+                    disabled={isIngesting}
+                    className='rounded-md bg-tamarind-700 px-4 py-1.5 text-xs font-medium text-white hover:bg-tamarind-800 disabled:opacity-50'
+                  >
+                    {isIngesting ? ingestProgress : 'Add to Knowledge Base'}
+                  </button>
+                  <button
+                    onClick={() => setViewMode('add-url')}
+                    className='rounded-md border border-gray-300 px-4 py-1.5 text-xs text-gray-700 hover:bg-gray-50'
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={() => {
+                      setUrlContent('')
+                      setUrlPreview(null)
+                      setFetchError('')
+                      setViewMode('browse')
+                    }}
                     className='rounded-md border border-gray-300 px-4 py-1.5 text-xs text-gray-700 hover:bg-gray-50'
                   >
                     Cancel
