@@ -19,6 +19,7 @@ const { app } = require('electron')
 const WORKSPACE = 'tamarind-knowledge-base'
 const METADATA_DIR = path.join(app.getPath('userData'), 'knowledge-base')
 const METADATA_FILE = path.join(METADATA_DIR, 'documents.json')
+const PRE_DATA_DIR = path.join(__dirname, '..', 'data')
 
 let embeddingModelId = null
 let modelStatus = 'unloaded' // 'unloaded' | 'loading' | 'ready'
@@ -200,6 +201,53 @@ async function deleteDocument(id) {
   return { success: true }
 }
 
+// ─── Pre-data Import ──────────────────────────────────────────
+
+function getPreDataCategories() {
+  const categories = []
+  if (!fs.existsSync(PRE_DATA_DIR)) return categories
+
+  const dirs = fs.readdirSync(PRE_DATA_DIR, { withFileTypes: true }).filter((d) => d.isDirectory())
+
+  for (const dir of dirs) {
+    const dirPath = path.join(PRE_DATA_DIR, dir.name)
+    const files = fs.readdirSync(dirPath).filter((f) => f.endsWith('.txt'))
+    categories.push({
+      id: dir.name,
+      name: dir.name,
+      fileCount: files.length,
+      imported: isCategoryImported(dir.name)
+    })
+  }
+  return categories
+}
+
+function isCategoryImported(categoryId) {
+  const metadata = loadMetadata()
+  return metadata.some((doc) => doc.source === `predata:${categoryId}`)
+}
+
+async function importPreDataCategory(categoryId) {
+  const dirPath = path.join(PRE_DATA_DIR, categoryId)
+  if (!fs.existsSync(dirPath)) {
+    return { success: false, error: 'Category not found' }
+  }
+
+  const files = fs.readdirSync(dirPath).filter((f) => f.endsWith('.txt'))
+  let importedCount = 0
+
+  for (const file of files) {
+    const filePath = path.join(dirPath, file)
+    const content = fs.readFileSync(filePath, 'utf-8')
+    const name = file.replace('.txt', '').replace(/_/g, ' ')
+
+    await ingestDocument(name, content, `predata:${categoryId}`)
+    importedCount++
+  }
+
+  return { success: true, imported: importedCount }
+}
+
 // ─── Exports ───────────────────────────────────────────────────
 
 module.exports = {
@@ -210,5 +258,7 @@ module.exports = {
   searchDocuments,
   listDocuments,
   deleteDocument,
-  fetchUrlContent
+  fetchUrlContent,
+  getPreDataCategories,
+  importPreDataCategory
 }

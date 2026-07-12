@@ -156,6 +156,10 @@ contextBridge.exposeInMainWorld('bridge', {
     search: (args) => ipcRenderer.invoke('rag:search', args),
     list: () => ipcRenderer.invoke('rag:list'),
     delete: (args) => ipcRenderer.invoke('rag:delete', args),
-    fetchUrl: (args) => ipcRenderer.invoke('rag:fetch-url', args)
+    fetchUrl: (args) => ipcRenderer.invoke('rag:fetch-url', args),
+    predata: {
+      categories: () => ipcRenderer.invoke('rag:predata:categories'),
+      import: (args) => ipcRenderer.invoke('rag:predata:import', args)
+    }
   }
 })

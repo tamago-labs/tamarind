@@ -46,6 +46,13 @@ export interface RagDocument {
   createdAt: string
 }
 
+export interface PreDataCategory {
+  id: string
+  name: string
+  fileCount: number
+  imported: boolean
+}
+
 export interface BridgeAPI {
   pkg(): Pkg
   applyUpdate(): Promise<void>
@@ -184,6 +191,12 @@ export interface BridgeAPI {
     list(): Promise<RagDocument[]>
     delete(args: { id: string }): Promise<{ success: boolean; error?: string }>
     fetchUrl(args: { url: string }): Promise<{ success: boolean; content?: string; error?: string }>
+    predata: {
+      categories(): Promise<PreDataCategory[]>
+      import(args: {
+        categoryId: string
+      }): Promise<{ success: boolean; imported?: number; error?: string }>
+    }
   }
 }
 
@@ -283,7 +296,11 @@ const noopBridge: BridgeAPI = {
     search: () => Promise.resolve({ success: false, error: 'bridge not available' }),
     list: () => Promise.resolve([]),
     delete: () => Promise.resolve({ success: false, error: 'bridge not available' }),
-    fetchUrl: () => Promise.resolve({ success: false, error: 'bridge not available' })
+    fetchUrl: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+    predata: {
+      categories: () => Promise.resolve([]),
+      import: () => Promise.resolve({ success: false, error: 'bridge not available' })
+    }
   }
 }
 

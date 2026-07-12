@@ -452,8 +452,9 @@ function registerModelsIpc() {
       throw new Error(`Unsupported ctx_size: ${config?.ctx_size}`)
     }
     const tools = !!config?.tools
-    modelStore.setAiConfig({ ctx_size: ctx, tools })
-    setActiveConfig({ ctx_size: ctx, tools })
+    const knowledgeBase = !!config?.knowledgeBase
+    modelStore.setAiConfig({ ctx_size: ctx, tools, knowledgeBase })
+    setActiveConfig({ ctx_size: ctx, tools, knowledgeBase })
     return { success: true }
   })
 
@@ -579,6 +580,14 @@ function registerRagIpc() {
 
   ipcMain.handle('rag:delete', async (_evt, args) => {
     return ragStore.deleteDocument(args.id)
+  })
+
+  ipcMain.handle('rag:predata:categories', () => {
+    return ragStore.getPreDataCategories()
+  })
+
+  ipcMain.handle('rag:predata:import', async (_evt, args) => {
+    return ragStore.importPreDataCategory(args.categoryId)
   })
 
   console.log('RAG / Knowledge Base IPC handlers registered')

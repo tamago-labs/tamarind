@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { FileText, Globe, Plus, Search, Trash2, X } from 'lucide-react'
 import { BaseModal } from './BaseModal'
 import { bridge } from '../lib/bridge'
-import type { RagDocument } from '../lib/bridge'
+import type { RagDocument, PreDataCategory } from '../lib/bridge'
 
 interface KnowledgeBaseModalProps {
   open: boolean
@@ -15,6 +15,8 @@ export function KnowledgeBaseModal({ open, onClose }: KnowledgeBaseModalProps) {
   const [documents, setDocuments] = useState<RagDocument[]>([])
   const [viewMode, setViewMode] = useState<ViewMode>('browse')
   const [modelStatus, setModelStatus] = useState<'unloaded' | 'loading' | 'ready'>('unloaded')
+  const [preDataCategories, setPreDataCategories] = useState<PreDataCategory[]>([])
+  const [isImportingPreData, setIsImportingPreData] = useState(false)
 
   // Add form state
   const [textContent, setTextContent] = useState('')
@@ -32,6 +34,7 @@ export function KnowledgeBaseModal({ open, onClose }: KnowledgeBaseModalProps) {
   useEffect(() => {
     if (open) {
       loadDocuments()
+      loadPreDataCategories()
       if (modelStatus === 'unloaded') {
         handleLoadModel()
       }
@@ -43,10 +46,23 @@ export function KnowledgeBaseModal({ open, onClose }: KnowledgeBaseModalProps) {
     setDocuments(docs)
   }
 
+  async function loadPreDataCategories() {
+    const categories = await bridge.rag.predata.categories()
+    setPreDataCategories(categories)
+  }
+
   async function handleLoadModel() {
     setModelStatus('loading')
     await bridge.rag.model.load()
     setModelStatus('ready')
+  }
+
+  async function handleImportPreData(categoryId: string) {
+    setIsImportingPreData(true)
+    await bridge.rag.predata.import({ categoryId })
+    await loadPreDataCategories()
+    await loadDocuments()
+    setIsImportingPreData(false)
   }
 
   async function handleAddText() {
@@ -193,6 +209,38 @@ export function KnowledgeBaseModal({ open, onClose }: KnowledgeBaseModalProps) {
               <Globe className='h-3.5 w-3.5' />
               Add URL
             </button>
+          </div>
+        )}
+
+        {/* Pre-data import section */}
+        {viewMode !== 'search' && preDataCategories.length > 0 && (
+          <div className='border-b border-gray-200 px-4 py-3'>
+            <p className='mb-2 text-xs font-medium text-gray-700'>Pre-loaded Data</p>
+            <div className='flex gap-2'>
+              {preDataCategories.map((cat) => (
+                <div
+                  key={cat.id}
+                  className='flex items-center gap-3 rounded-md border border-gray-200 px-3 py-2'
+                >
+                  <span className='text-sm'>{cat.id.includes('FIFA') ? '⚽' : '📚'}</span>
+                  <div>
+                    <p className='text-xs font-medium text-gray-700'>{cat.name}</p>
+                    <p className='text-[10px] text-gray-500'>{cat.fileCount} files</p>
+                  </div>
+                  {cat.imported ? (
+                    <span className='text-[10px] text-green-600'>✓ Imported</span>
+                  ) : (
+                    <button
+                      onClick={() => handleImportPreData(cat.id)}
+                      disabled={isImportingPreData}
+                      className='rounded-md border border-gray-300 px-2 py-1 text-[10px] text-gray-700 hover:bg-gray-50 disabled:opacity-50'
+                    >
+                      Import
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

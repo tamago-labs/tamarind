@@ -48,8 +48,8 @@ let currentLoadedAt = /** @type {number|null} */ (null)
 // Mirrored from modelStore.setAiConfig via setActiveConfig(). Module-scope
 // so ensureModel can read it on every load without threading it through
 // the IPC callbacks (matches TamaFlow's module-scope design).
-/** @type {{ ctx_size: 2048|4096|8192|16384, tools: boolean }} */
-let activeConfig = { ctx_size: 8192, tools: false }
+/** @type {{ ctx_size: 2048|4096|8192|16384, tools: boolean, knowledgeBase: boolean }} */
+let activeConfig = { ctx_size: 8192, tools: false, knowledgeBase: false }
 
 /** Return the current active config (read-only copy). */
 function getActiveConfig() {
@@ -124,7 +124,8 @@ function setMainWindow(window) {
 function setActiveConfig(config) {
   activeConfig = {
     ctx_size: Number(config?.ctx_size) || 4096,
-    tools: !!config?.tools
+    tools: !!config?.tools,
+    knowledgeBase: !!config?.knowledgeBase
   }
 }
 
@@ -529,7 +530,7 @@ function isStreamingNow() {
 function buildModelConfig() {
   return {
     ctx_size: activeConfig.ctx_size,
-    tools: activeConfig.tools
+    tools: activeConfig.tools || activeConfig.knowledgeBase
   }
 }
 

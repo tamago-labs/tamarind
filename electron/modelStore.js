@@ -330,7 +330,8 @@ class ModelStore {
   setAiConfig(config) {
     this.state.aiConfig = {
       ctx_size: config.ctx_size,
-      tools: config.tools
+      tools: config.tools,
+      knowledgeBase: config.knowledgeBase
     }
     this.save()
   }

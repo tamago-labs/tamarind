@@ -14,11 +14,14 @@ const { completion, cancel: sdkCancel } = require('@qvac/sdk')
 const { mapError, getActiveModelId, getActiveConfig, setStreamingNow } = require('./qvac')
 const { executeCanvasTool } = require('./canvasTools')
 
-// System prompt for canvas-aware AI. Only used when tools are enabled.
-// Canvas state is NOT injected here — the AI uses get_items tool to query it.
-const CANVAS_SYSTEM_PROMPT = `You are a tactical whiteboard assistant for Tamarind. You help users create and modify canvas diagrams for sports tactics, sales pipelines, system architectures, and other planning scenarios.
+// Base system prompt - always used
+const BASE_SYSTEM_PROMPT = `You are a helpful AI assistant for Tamarind, a tactical whiteboard application for teams. You help users with their questions and tasks.
 
-AVAILABLE TOOLS:
+You are conversational, helpful, and concise. When users ask about canvas content or want to create diagrams, guide them on how to do it.`
+
+// Canvas tools prompt - only used when Prompt-to-Canvas is enabled
+const CANVAS_TOOLS_PROMPT = `
+CANVAS TOOLS:
 - get_items: View all current canvas items on the board
 - add_items: Add shapes to the canvas (rect, ellipse, text, connector, note)
 - update_items: Modify existing items by their ID
@@ -55,6 +58,36 @@ SHAPE FIELDS:
 COORDINATES: (0,0) top-left, canvas ~1000x700 units
 
 COLORS: #86efac (green/fields), #dbeafe (blue/info), #fde68a (yellow/courts), #fed7aa (orange/alerts), #ddd6fe (purple/UI)`
+
+// Knowledge Base prompt - only used when Knowledge Base is enabled
+const KB_TOOL_PROMPT = `
+KNOWLEDGE BASE:
+- You MUST call the search_knowledge_base tool when users ask questions that could involve stored data, documents, or knowledge.
+- NEVER assume the Knowledge Base has no results without calling search_knowledge_base first.
+- ALWAYS use the tool. Do NOT generate fake search results or claim information is missing without searching.
+- The tool takes a "query" parameter (the user's question or keywords) and returns actual document chunks.
+- If you don't call the tool, you are NOT searching the Knowledge Base.
+- Only report "not found" AFTER you have called the tool and received empty results.`
+
+// Build system prompt based on config
+function buildSystemPrompt(config) {
+  // No system prompt when both tools and KB are disabled
+  if (!config.tools && !config.knowledgeBase) {
+    return null
+  }
+
+  let prompt = BASE_SYSTEM_PROMPT
+
+  if (config.tools && config.knowledgeBase) {
+    prompt += CANVAS_TOOLS_PROMPT + KB_TOOL_PROMPT
+  } else if (config.tools) {
+    prompt += CANVAS_TOOLS_PROMPT
+  } else if (config.knowledgeBase) {
+    prompt += KB_TOOL_PROMPT
+  }
+
+  return prompt
+}
 
 // ───────────────────────────── Canvas tool definitions ─────────────────────
 
@@ -214,17 +247,23 @@ async function sendMessage({ messages }) {
   setStreamingNow(true)
 
   const config = getActiveConfig()
-  const toolsEnabled = config.tools
-  const tools = toolsEnabled
-    ? [...CANVAS_TOOLS, ...(config.knowledgeBase ? [KNOWLEDGE_BASE_TOOL] : [])]
-    : undefined
+  const canvasToolsEnabled = config.tools
+  const kbEnabled = config.knowledgeBase
 
-  if (toolsEnabled) {
-    history = [{ role: 'system', content: CANVAS_SYSTEM_PROMPT }, ...history]
+  // Include tools if either canvas tools or KB is enabled
+  const tools =
+    canvasToolsEnabled || kbEnabled
+      ? [...(canvasToolsEnabled ? CANVAS_TOOLS : []), ...(kbEnabled ? [KNOWLEDGE_BASE_TOOL] : [])]
+      : undefined
+
+  // Always add system prompt (with or without tools)
+  const systemPrompt = buildSystemPrompt(config)
+  if (systemPrompt) {
+    history = [{ role: 'system', content: systemPrompt }, ...history]
   }
 
   // Store history for agentic loop (excluding system prompt)
-  currentHistory = toolsEnabled ? history.slice(1) : history
+  currentHistory = history.slice(systemPrompt ? 1 : 0)
 
   const run = completion({
     modelId,
@@ -356,15 +395,25 @@ async function driveStream(run) {
 
       // Start new completion with updated history
       const config = getActiveConfig()
-      const fullHistory = [{ role: 'system', content: CANVAS_SYSTEM_PROMPT }, ...currentHistory]
+      const systemPrompt = buildSystemPrompt(config)
+      const fullHistory = systemPrompt
+        ? [{ role: 'system', content: systemPrompt }, ...currentHistory]
+        : currentHistory
 
       // After first tool call iteration, disable tools to force text output
       // This prevents the AI from creating items in a loop
+      const canvasToolsEnabled = config.tools
+      const kbEnabled = config.knowledgeBase
       const toolsForNext =
         toolCallCount >= 1
-          ? undefined
-          : config.tools
-            ? [...CANVAS_TOOLS, ...(config.knowledgeBase ? [KNOWLEDGE_BASE_TOOL] : [])]
+          ? kbEnabled
+            ? [KNOWLEDGE_BASE_TOOL]
+            : undefined
+          : canvasToolsEnabled || kbEnabled
+            ? [
+                ...(canvasToolsEnabled ? CANVAS_TOOLS : []),
+                ...(kbEnabled ? [KNOWLEDGE_BASE_TOOL] : [])
+              ]
             : undefined
 
       const newRun = completion({
