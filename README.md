@@ -9,8 +9,10 @@ Internet is the first thing to fail when teams need it most. Stadiums, conferenc
 - **Offline-first tactical canvas** — Multi-board collaborative workspace with templates for sports, sales, system design, or a blank canvas.
 - **Peer-to-peer collaboration** — **Hyperswarm** peer discovery (powered by **HyperDHT** for internet-wide P2P) with an **Autobase** multi-writer log and **HyperDB** replicated state, enabling conflict-free collaboration across the internet without centralized infrastructure.
 - **Built-in team chat** — Share invite codes and communicate alongside your whiteboard.
-- **Local AI assistant** — Execute **Meta Llama**, **Qwen**, and **Gemma** GGUF models locally through **QVAC**, with peer-to-peer AI relay so teammates can use the host's loaded model without downloading their own.
-- **Tactical whiteboard persistence** — Every board operation is appended to **Hypercore**, providing deterministic replay, backup/restore, SVG/PNG export, and a tamper-evident audit trail.
+- **Local AI assistant** — Execute **Qwen 1.7B**, **Qwen 4B**, **Gemma 4B**, and **Gemma 31B** models locally through **QVAC**, with peer-to-peer AI relay so teammates can use the host's loaded model without downloading their own.
+- **Prompt-to-Canvas** — AI can create shapes on the canvas directly from chat prompts.
+- **Knowledge Base** — RAG-powered document search with semantic embeddings for instant access to stored information.
+- **Video sharing** — Upload and display videos on the canvas (50MB limit) with P2P sync.
 
 This project is a fork of the [Holepunch `hello-pear-electron` template](https://github.com/holepunchto/hello-pear-electron).
 
