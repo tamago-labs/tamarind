@@ -169,6 +169,29 @@ Additional capabilities planned:
 
 ## Architecture
 
+### Feature Mapping
+
+| Feature | Description | Integration | Key Files |
+|---------|-------------|-------------|-----------|
+| **Shared Canvas** | Multi-board workspace with 6 shape types (rect, ellipse, text, note, connector, video) | None | `renderer/src/canvas/canvasReducer.ts`, `renderer/src/canvas/CanvasItems.tsx` |
+| **P2P Sync** | Autobase multi-writer log with HyperDB replicated state | Pears | `workers/tamarind-room.js`, `schema.js` |
+| **Invite Codes** | BlindPairing-based invite system for secure peer onboarding | Pears | `workers/tamarind-room.js`, `renderer/src/components/InviteJoinModal.tsx` |
+| **HyperDHT** | Hyperswarm-powered internet-wide peer discovery | Pears | `workers/tamarind-room-entry.js` |
+| **Identity** | Persistent display names via writer keypair + rename-self | Pears | `renderer/src/hooks/useRoom.ts`, `renderer/src/components/NameEditModal.tsx` |
+| **Local AI** | QVAC SDK integration with Qwen3-1.7B, Qwen3-4B, Gemma4-4B, Gemma4-31B | QVAC | `electron/qvac.js`, `electron/aiChat.js` |
+| **RAG** | Knowledge Base with GTE Large FP16 embeddings for semantic search | QVAC | `electron/ragStore.js`, `renderer/src/components/KnowledgeBaseModal.tsx` |
+| **Prompt-to-Canvas** | AI tool calling to create/update/remove shapes from chat | QVAC + Pears | `renderer/src/ai/tools.ts`, `electron/canvasTools.js` |
+| **AI Relay** | P2P relay for using peer's loaded model without local download | Pears + QVAC | `electron/aiChat.js`, `workers/tamarind-room.js` |
+| **Video Upload** | Hyperblobs-based video storage with blob server streaming | Pears | `workers/tamarind-room-entry.js`, `renderer/src/canvas/VideoShape.tsx` |
+| **Sticky Notes** | First-class note shape with folded corner effect | None | `renderer/src/canvas/shapes/NoteShape.tsx` |
+| **Multi-Board** | Board CRUD with last-board protection and cascade delete | None | `renderer/src/canvas/canvasReducer.ts`, `renderer/src/components/BoardsMenu.tsx` |
+| **Templates** | 23 templates across 7 categories (Sports, Marketing, Product, etc.) | None | `renderer/src/data/templates.ts`, `renderer/src/components/TemplatesModal.tsx` |
+| **Group Chat** | P2P persistent chat with writer identity resolution | Pears | `renderer/src/components/GroupChatPanel.tsx`, `workers/tamarind-room.js` |
+| **Export SVG/PNG** | Selection-aware canvas export to SVG or PNG | None | `renderer/src/canvas/svgExport.ts`, `renderer/src/components/ExportMenu.tsx` |
+| **Board Backup/Restore** | Single-board backup file with restore capability | None | `renderer/src/data/boardIO.ts`, `renderer/src/components/CanvasPage.tsx` |
+
+**Integration Key:** **Pears** = Holepunch stack (Hypercore, Autobase, HyperDB, Hyperswarm, Corestore) • **QVAC** = Local AI runtime (llama.cpp, Qwen3, Gemma4 models) • **None** = Pure frontend (React/TypeScript) • **Pears + QVAC** = Feature uses both stacks
+
 ### Wire protocol (renderer ↔ TamarindRoom worker)
 
 JSON frames over FramedStream. `at` is ISO-string ms (`Date.now()`). All IDs are strings unless noted.
