@@ -17,9 +17,9 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
-import { useRoom } from '../hooks/useRoom'
+import { useRoom, setActiveBoardTracker } from '../hooks/useRoom'
 import { canvasReducer } from '../canvas/canvasReducer'
 import type { Action, CanvasState } from '../canvas/canvasReducer'
 import { withHistory, type HistoryState } from '../canvas/history'
@@ -52,8 +52,13 @@ import { Marquee } from '../canvas/Marquee'
 import { CanvasFooter } from './CanvasFooter'
 import { CanvasToolbar, type SelectedTool } from './CanvasToolbar'
 import { PropertiesDrawer } from './PropertiesDrawer'
-import { RightDrawer } from './RightDrawer'
 import { TemplatesModal } from './TemplatesModal'
+import type { Template } from '../data/templates'
+import { KnowledgeBaseModal } from './KnowledgeBaseModal'
+import { SlideInPanel } from './SlideInPanel'
+import { FloatingChatButton } from './FloatingChatButton'
+import { AIChatTab } from './AIChatTab'
+import { GroupChatPanel } from './GroupChatPanel'
 import { BoardBackupError, buildBackupFilename, parseBackup, serializeBoard } from '../data/boardIO'
 import {
   buildExportFilename,
@@ -69,12 +74,12 @@ const MIN_SHAPE_SIZE = 20
 // Snap radius for the connector draw flow. Same screen-pixel value as
 // the existing `ConnectorHandles` so the two paths feel identical;
 // `clientToWorld` divides by zoom to convert to world units.
-const CONNECTOR_SNAP_RADIUS_PX = 30
+const CONNECTOR_SNAP_RADIUS_PX = 40
 // Minimum distance (world units) the cursor must travel between
 // pointerdown and pointerup to count as a "draw" rather than a click.
 // Clicks without movement drop the draft without committing — keeps
 // the canvas free of 0-length connectors from accidental clicks.
-const CONNECTOR_MIN_DRAG_DISTANCE = 8
+const CONNECTOR_MIN_DRAG_DISTANCE = 4
 
 function makeInitialCanvasState(): CanvasState {
   const now = Date.now()
@@ -193,6 +198,9 @@ export function CanvasPage() {
   // of the optimistic dispatch in `handleInsertTemplate`.
   const [templatesOpen, setTemplatesOpen] = useState(false)
 
+  // Knowledge Base modal open/close
+  const [knowledgeBaseOpen, setKnowledgeBaseOpen] = useState(false)
+
   // Toggle marquee mode. Clicking the toolbar button arms the marquee;
   // clicking it again (or pressing Escape) disarms it. The toggle stays
   // armed across many drags — the user can paint several marquees in
@@ -200,6 +208,10 @@ export function CanvasPage() {
   // handle the marquee tool.
   const [marqueeMode, setMarqueeMode] = useState(false)
   const marqueeModeRef = useRef(false)
+
+  // Floating chat panels — AI (left) and Team (right)
+  const [showAiChat, setShowAiChat] = useState(false)
+  const [showTeamChat, setShowTeamChat] = useState(false)
 
   // Phase 3: connector draw mode. The toolbar's Connector button flips
   // this; the canvas surface then intercepts pointerdown to start a
@@ -461,6 +473,10 @@ export function CanvasPage() {
     () => Object.values(state.items).sort((a, b) => a.order - b.order),
     [state.items]
   )
+  const activeBoardItems = useMemo(
+    () => itemsArray.filter((it) => it.boardId === state.activeBoardId),
+    [itemsArray, state.activeBoardId]
+  )
   const visibleItemIds = useMemo(
     () => itemsArray.filter((it) => it.boardId === state.activeBoardId).map((it) => it.id),
     [itemsArray, state.activeBoardId]
@@ -505,7 +521,7 @@ export function CanvasPage() {
             fill: DEFAULT_FILL,
             stroke: DEFAULT_STROKE,
             strokeWidth: DEFAULT_STROKE_WIDTH,
-            text: DEFAULT_NOTE_TEXT,
+            text: '',
             fontSize: DEFAULT_NOTE_FONT_SIZE,
             order: 0,
             updatedAt: now
@@ -552,6 +568,24 @@ export function CanvasPage() {
             strokeWidth: DEFAULT_STROKE_WIDTH,
             text: '',
             fontSize: DEFAULT_TEXT_FONT_SIZE,
+            order: 0,
+            updatedAt: now
+          }
+          break
+        case 'note':
+          item = {
+            id,
+            boardId: state.activeBoardId,
+            type,
+            x,
+            y,
+            w: 120,
+            h: 80,
+            fill: '#fef3c7',
+            stroke: DEFAULT_STROKE,
+            strokeWidth: DEFAULT_STROKE_WIDTH,
+            text: '',
+            fontSize: DEFAULT_NOTE_FONT_SIZE,
             order: 0,
             updatedAt: now
           }
@@ -852,6 +886,8 @@ export function CanvasPage() {
     (id: string) => {
       dispatchAction({ type: 'set-active', id })
       setSelectedIds(new Set())
+      // Update the tracker so AI tools see the correct active board
+      setActiveBoardTracker(id)
     },
     [dispatchAction]
   )
@@ -952,15 +988,20 @@ export function CanvasPage() {
   // `add-items` bulk action (which goes through `useRoom.sendAction` so
   // peers echo the same items via the Autobase snapshot).
   const handleInsertTemplate = useCallback(
-    (templateItems: BoardScopedItem[]) => {
+    (template: Template) => {
       if (!state.activeBoardId) return
       const now = Date.now()
+
+      // Get items from either build() or static items
+      const templateItems = template.build
+        ? template.build(state.activeBoardId, now)
+        : template.items || []
+
       const stamped = templateItems.map((it) => ({
         ...it,
         id: uid(),
         boardId: state.activeBoardId!,
-        updatedAt: now,
-        order: 0
+        updatedAt: now
       }))
       dispatchAction({ type: 'add-items', items: stamped, at: now })
       setSelectedIds(new Set(stamped.map((it) => it.id)))
@@ -1156,6 +1197,76 @@ export function CanvasPage() {
     [state.activeBoardId, state.boards, state.items, itemsArray, selectedIds, surfaceRef, pan, zoom]
   )
 
+  // Video upload with file size limit (50MB) - Local storage approach
+  const handleAddVideo = useCallback(() => {
+    if (!state.activeBoardId) return
+
+    const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
+
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'video/mp4,video/webm,video/ogg'
+    input.style.display = 'none'
+    input.onchange = () => {
+      const file = input.files?.[0]
+      input.remove()
+      if (!file) return
+
+      // Check file size
+      if (file.size > MAX_FILE_SIZE) {
+        setFeedbackBanner({
+          kind: 'error',
+          message: `File too large. Maximum size is 50MB. Your file: ${(file.size / 1024 / 1024).toFixed(1)}MB`
+        })
+        return
+      }
+
+      setFeedbackBanner({
+        kind: 'success',
+        message: `Uploading "${file.name}"...`
+      })
+
+      // Read file as data URL for local storage
+      const reader = new FileReader()
+      reader.onload = () => {
+        const dataUrl = reader.result as string
+
+        // Add video item to canvas with data URL
+        const { x, y } = computeSpawnWorld()
+        const now = Date.now()
+        const id = uid()
+        const videoItem = {
+          id,
+          boardId: state.activeBoardId!,
+          type: 'video' as const,
+          x,
+          y,
+          w: 320,
+          h: 240,
+          stroke: DEFAULT_STROKE,
+          strokeWidth: DEFAULT_STROKE_WIDTH,
+          fill: '#000000',
+          videoUrl: dataUrl,
+          videoFileName: file.name,
+          videoMimeType: file.type,
+          videoSize: file.size,
+          order: 0,
+          updatedAt: now
+        }
+        dispatchAction({ type: 'add-item', item: videoItem })
+        setSelectedIds(new Set([id]))
+
+        setFeedbackBanner({
+          kind: 'success',
+          message: `Video "${file.name}" added to canvas!`
+        })
+      }
+      reader.readAsDataURL(file)
+    }
+    document.body.appendChild(input)
+    input.click()
+  }, [state.activeBoardId, computeSpawnWorld, dispatchAction, setSelectedIds])
+
   const handleExportSvg = useCallback(() => {
     void exportBoard('svg')
   }, [exportBoard])
@@ -1330,6 +1441,11 @@ export function CanvasPage() {
         canExport={state.activeBoardId !== null}
         onExportSvg={handleExportSvg}
         onExportPng={handleExportPng}
+        invite={room.invite}
+        role={room.role}
+        peers={room.peers}
+        onOpenKnowledgeBase={() => setKnowledgeBaseOpen(true)}
+        onAddVideo={handleAddVideo}
       />
       {feedbackBanner && (
         <div
@@ -1351,7 +1467,46 @@ export function CanvasPage() {
           </button>
         </div>
       )}
-      <div className='flex flex-1 flex-row overflow-hidden'>
+      <div className='relative flex flex-1 flex-row overflow-hidden'>
+        <AnimatePresence>
+          {showAiChat && (
+            <SlideInPanel
+              key='ai-chat'
+              onClose={() => setShowAiChat(false)}
+              side='left'
+              title='AI Assistant'
+            >
+              <AIChatTab />
+            </SlideInPanel>
+          )}
+          {showTeamChat && (
+            <SlideInPanel
+              key='team-chat'
+              onClose={() => setShowTeamChat(false)}
+              side='left'
+              title='Team Chat'
+            >
+              <GroupChatPanel
+                invite={room.invite}
+                peers={room.peers}
+                messages={room.chat}
+                role={room.role}
+                writable={room.writable}
+                me={room.me}
+                identities={room.identities}
+                onSendChat={room.sendChat}
+                onRemoveChat={(id) => room.removeChats([id])}
+                onClearChat={room.clearChat}
+                onCopyInvite={() => {
+                  if (!room.invite) return
+                  if (navigator.clipboard?.writeText) {
+                    navigator.clipboard.writeText(room.invite).catch(() => {})
+                  }
+                }}
+              />
+            </SlideInPanel>
+          )}
+        </AnimatePresence>
         <main
           ref={surfaceRef}
           onPointerDown={handleSurfacePointerDown}
@@ -1382,7 +1537,8 @@ export function CanvasPage() {
             />
             <CanvasOverlay
               showPorts={selectedTool === 'connector'}
-              hoverShape={hoverShapeId ? (itemsById[hoverShapeId] ?? null) : null}
+              items={activeBoardItems}
+              hoverShapeId={hoverShapeId}
               zoom={zoom}
               draft={draft}
             />
@@ -1390,30 +1546,68 @@ export function CanvasPage() {
           <Marquee
             surfaceRef={surfaceRef}
             zoom={zoom}
-            items={itemsArray}
+            items={activeBoardItems}
             itemsById={itemsById}
             enabled={marqueeMode}
             onCommit={(ids) => setSelectedIds(new Set(ids))}
           />
         </main>
-        <PropertiesDrawer
-          selectedItem={singleSelected}
-          selectedCount={selectedIds.size}
-          selectedIds={Array.from(selectedIds)}
-          itemsById={itemsById}
-          onUpdate={handleUpdate}
-          onTransientUpdate={handleTransientUpdate}
-          onBringToFront={handleBringToFront}
-          onSendToBack={handleSendToBack}
-          emptyPanel={<RightDrawer />}
-        />
+        {selectedIds.size > 0 && (
+          <PropertiesDrawer
+            selectedItem={singleSelected}
+            selectedCount={selectedIds.size}
+            selectedIds={Array.from(selectedIds)}
+            itemsById={itemsById}
+            onUpdate={handleUpdate}
+            onTransientUpdate={handleTransientUpdate}
+            onBringToFront={handleBringToFront}
+            onSendToBack={handleSendToBack}
+          />
+        )}
       </div>
       <CanvasFooter />
+
+      {/* ── Floating chat buttons (stacked on left) ─────────────── */}
+      {!showAiChat && !showTeamChat && (
+        <div className='fixed bottom-12 left-4 z-30 flex flex-col gap-2'>
+          <FloatingChatButton onClick={() => setShowTeamChat(true)} label='Team Chat'>
+            <svg
+              className='h-5 w-5'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              strokeWidth='2'
+            >
+              <path d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' />
+            </svg>
+          </FloatingChatButton>
+          <FloatingChatButton onClick={() => setShowAiChat(true)} label='AI Assistant'>
+            <svg
+              className='h-5 w-5'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              strokeWidth='2'
+              strokeLinecap='round'
+              strokeLinejoin='round'
+            >
+              <rect x='3' y='11' width='18' height='10' rx='2' />
+              <circle cx='12' cy='5' r='2' />
+              <path d='M12 7v4' />
+              <line x1='8' y1='16' x2='8' y2='16' />
+              <line x1='16' y1='16' x2='16' y2='16' />
+            </svg>
+          </FloatingChatButton>
+        </div>
+      )}
+
       <TemplatesModal
         open={templatesOpen}
         onClose={() => setTemplatesOpen(false)}
         onInsert={handleInsertTemplate}
       />
+
+      <KnowledgeBaseModal open={knowledgeBaseOpen} onClose={() => setKnowledgeBaseOpen(false)} />
     </motion.div>
   )
 }

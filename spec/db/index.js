@@ -554,6 +554,140 @@ const collection7 = {
   decodedVersion: 0
 }
 
+// '@tamarind/identity' collection key
+const collection8_key = new IndexEncoder([
+  IndexEncoder.BUFFER
+], { prefix: 8 })
+
+function collection8_indexify (record) {
+  const a = record.writerKey
+  return a === undefined ? [] : [a]
+}
+
+// '@tamarind/identity' value encoding
+const collection8_enc = getEncoding('@tamarind/identity/hyperdb#8')
+
+// '@tamarind/identity' reconstruction function
+function collection8_reconstruct (schemaVersion, keyBuf, valueBuf) {
+  const key = collection8_key.decode(keyBuf)
+  setVersion(schemaVersion)
+  const state = { start: 0, end: valueBuf.byteLength, buffer: valueBuf }
+  const type = c.uint.decode(state)
+  if (type !== 0) throw new Error('Unknown collection type: ' + type)
+  collection8.decodedVersion = c.uint.decode(state)
+  const record = collection8_enc.decode(state)
+  record.writerKey = key[0]
+  return record
+}
+// '@tamarind/identity' key reconstruction function
+function collection8_reconstruct_key (keyBuf) {
+  const key = collection8_key.decode(keyBuf)
+  return {
+    writerKey: key[0]
+  }
+}
+
+// '@tamarind/identity'
+const collection8 = {
+  name: '@tamarind/identity',
+  id: 8,
+  version: 1,
+  encodeKey (record) {
+    const key = [record.writerKey]
+    return collection8_key.encode(key)
+  },
+  encodeKeyRange ({ gt, lt, gte, lte } = {}) {
+    return collection8_key.encodeRange({
+      gt: gt ? collection8_indexify(gt) : null,
+      lt: lt ? collection8_indexify(lt) : null,
+      gte: gte ? collection8_indexify(gte) : null,
+      lte: lte ? collection8_indexify(lte) : null
+    })
+  },
+  encodeValue (schemaVersion, collectionVersion, record) {
+    setVersion(schemaVersion)
+    const state = { start: 0, end: 2, buffer: null }
+    collection8_enc.preencode(state, record)
+    state.buffer = b4a.allocUnsafe(state.end)
+    state.buffer[state.start++] = 0
+    state.buffer[state.start++] = collectionVersion
+    collection8_enc.encode(state, record)
+    return state.buffer
+  },
+  trigger: null,
+  reconstruct: collection8_reconstruct,
+  reconstructKey: collection8_reconstruct_key,
+  indexes: [],
+  decodedVersion: 0
+}
+
+// '@tamarind/media' collection key
+const collection9_key = new IndexEncoder([
+  IndexEncoder.BUFFER
+], { prefix: 9 })
+
+function collection9_indexify (record) {
+  const a = record.id
+  return a === undefined ? [] : [a]
+}
+
+// '@tamarind/media' value encoding
+const collection9_enc = getEncoding('@tamarind/media/hyperdb#9')
+
+// '@tamarind/media' reconstruction function
+function collection9_reconstruct (schemaVersion, keyBuf, valueBuf) {
+  const key = collection9_key.decode(keyBuf)
+  setVersion(schemaVersion)
+  const state = { start: 0, end: valueBuf.byteLength, buffer: valueBuf }
+  const type = c.uint.decode(state)
+  if (type !== 0) throw new Error('Unknown collection type: ' + type)
+  collection9.decodedVersion = c.uint.decode(state)
+  const record = collection9_enc.decode(state)
+  record.id = key[0]
+  return record
+}
+// '@tamarind/media' key reconstruction function
+function collection9_reconstruct_key (keyBuf) {
+  const key = collection9_key.decode(keyBuf)
+  return {
+    id: key[0]
+  }
+}
+
+// '@tamarind/media'
+const collection9 = {
+  name: '@tamarind/media',
+  id: 9,
+  version: 1,
+  encodeKey (record) {
+    const key = [record.id]
+    return collection9_key.encode(key)
+  },
+  encodeKeyRange ({ gt, lt, gte, lte } = {}) {
+    return collection9_key.encodeRange({
+      gt: gt ? collection9_indexify(gt) : null,
+      lt: lt ? collection9_indexify(lt) : null,
+      gte: gte ? collection9_indexify(gte) : null,
+      lte: lte ? collection9_indexify(lte) : null
+    })
+  },
+  encodeValue (schemaVersion, collectionVersion, record) {
+    setVersion(schemaVersion)
+    const state = { start: 0, end: 2, buffer: null }
+    collection9_enc.preencode(state, record)
+    state.buffer = b4a.allocUnsafe(state.end)
+    state.buffer[state.start++] = 0
+    state.buffer[state.start++] = collectionVersion
+    collection9_enc.encode(state, record)
+    return state.buffer
+  },
+  trigger: null,
+  reconstruct: collection9_reconstruct,
+  reconstructKey: collection9_reconstruct_key,
+  indexes: [],
+  decodedVersion: 0
+}
+
 const collections = [
   collection0,
   collection1,
@@ -562,7 +696,9 @@ const collections = [
   collection4,
   collection5,
   collection6,
-  collection7
+  collection7,
+  collection8,
+  collection9
 ]
 
 const indexes = [
@@ -580,6 +716,8 @@ function resolveCollection (name) {
     case '@tamarind/relay-request': return collection5
     case '@tamarind/relay-response': return collection6
     case '@tamarind/relay-cancel': return collection7
+    case '@tamarind/identity': return collection8
+    case '@tamarind/media': return collection9
     default: return null
   }
 }

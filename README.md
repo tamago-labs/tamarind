@@ -6,11 +6,13 @@ Internet is the first thing to fail when teams need it most. Stadiums, conferenc
 
 **Tamarind** is the tactical whiteboard that works anyway — sports teams, sales teams, and hackathon crews plan strategy offline on a shared canvas, sync P2P with the rest of the team using **Pear by Holepunch**, and get AI-powered suggestions to sharpen their approach through **QVAC**, all without the cloud.
 
-- **Offline-first tactical canvas** —  Multi-board collaborative workspace with templates for sports, sales, system design, or a blank canvas.
-- **Peer-to-peer collaboration** — **Hyperswarm** peer discovery with an **Autobase** multi-writer log and **HyperDB** replicated state, enabling conflict-free collaboration without centralized infrastructure.
+- **Offline-first tactical canvas** — Multi-board collaborative workspace with templates for sports, sales, system design, or a blank canvas.
+- **Peer-to-peer collaboration** — **Hyperswarm** peer discovery (powered by **HyperDHT** for internet-wide P2P) with an **Autobase** multi-writer log and **HyperDB** replicated state, enabling conflict-free collaboration across the internet without centralized infrastructure.
 - **Built-in team chat** — Share invite codes and communicate alongside your whiteboard.
-- **Local AI assistant** — Execute **Meta Llama**, **Qwen**, and **Gemma** GGUF models locally through **QVAC**, with peer-to-peer AI relay so teammates can use the host's loaded model without downloading their own.
-- **Tactical whiteboard persistence** — Every board operation is appended to **Hypercore**, providing deterministic replay, backup/restore, SVG/PNG export, and a tamper-evident audit trail.
+- **Local AI assistant** — Execute **Qwen 1.7B**, **Qwen 4B**, **Gemma 4B**, and **Gemma 31B** models locally through **QVAC**, with peer-to-peer AI relay so teammates can use the host's loaded model without downloading their own.
+- **Prompt-to-Canvas** — AI can create shapes on the canvas directly from chat prompts.
+- **Knowledge Base** — RAG-powered document search with semantic embeddings for instant access to stored information.
+- **Video sharing** — Upload and display videos on the canvas (50MB limit) with P2P sync.
 
 This project is a fork of the [Holepunch `hello-pear-electron` template](https://github.com/holepunchto/hello-pear-electron).
 
@@ -73,18 +75,22 @@ npm run make       # Build platform installers
 
 For production P2P distribution and multisig releases, Tamarind follows the standard **Pear Runtime** workflow (`pear build`, `pear stage`, `pear provision`, and `pear multisig`).
 
-## What's Available Now
+## Core Features
 
 ### Offline Tactical Whiteboard
 
 The canvas is designed for tactical planning rather than generic diagramming, with deterministic synchronization across peers.
 
-- Four object types: **rectangle**, **ellipse**, **connector**, and **first-class text** with in-place double-click editing.
+- Five object types: **rectangle**, **ellipse**, **connector**, **first-class text** with in-place double-click editing, **sticky notes**, and **video** support.
 - Figma-style connector workflow with five connection ports per shape, bezier or straight routing, configurable arrows, stroke styles, labels, and snap previews.
 - Rich editing tools including drag, resize, marquee selection, z-order, per-object styling, and connector configuration.
 - Deterministic connector attachment that automatically follows connected shapes during movement and safely orphans connectors when shapes are removed.
 - High-frequency local rendering during drag operations with commit-on-release replication, reducing unnecessary network traffic.
 - SVG and PNG export with selection-aware rendering, plus board backup and restore.
+- Persistent display names across sessions and peers (Identity).
+- Video upload and display on the canvas (50MB limit).
+- **Prompt-to-Canvas** — AI can create shapes on the canvas from chat prompts.
+- **Knowledge Base** — RAG-powered document search for instant access to stored information.
 
 ### Multi-Board Workspace
 
@@ -99,6 +105,7 @@ A single Tamarind workspace can contain multiple tactical boards.
 Built entirely on the **Pear Runtime** ecosystem.
 
 - Peer discovery through **Hyperswarm** using invite codes.
+- **HyperDHT**-powered internet-wide P2P connectivity across corporate networks, mobile networks, and public internet.
 - Multi-writer synchronization powered by **Autobase** with **HyperDB** replicated views.
 - Encrypted replicated collections for boards, canvas items, chat, invitations, and AI state.
 - Every reducer action is replicated as an append-only operation, allowing new peers to replay history and converge deterministically.
@@ -119,22 +126,27 @@ Communication is integrated directly into the workspace.
 
 Local AI is integrated directly into the tactical workflow.
 
-- Built-in **Qwen3-1.7B** and **Qwen3-4B** models.
+- Built-in **Qwen 1.7B**, **Qwen 4B**, **Gemma 4B**, and **Gemma 31B** models.
 - Import custom **GGUF** models from disk or remote URLs.
 - Configurable context size and tool support persisted between sessions.
 - Streaming chat with persistent conversation history.
 - Local or Host inference modes.
 - P2P AI relay allows teammates to use another peer's loaded model without downloading a model themselves.
+- **Prompt-to-Canvas** — AI can create shapes on the canvas from chat prompts.
+- **Knowledge Base** — RAG-powered document search for instant access to stored information.
 - Complete IPC pipeline connecting the Electron renderer to the QVAC SDK running in the main process.
 
 ### Built-in Templates
 
 Ready-to-use templates for common tactical planning scenarios.
 
-- Football pitch
-- Basketball half-court
-- Sales pipeline
-- Hackathon system architecture
+- **Football** — 4-4-2, 4-3-3, Corner Kick, Free Kick, Blank Pitch
+- **Basketball** — 2-3 Zone, Blank Court
+- **Marketing** — SWOT, Funnel, User Journey
+- **Product** — Roadmap, Prioritization, Story Map, Lean Canvas
+- **Strategy** — BMC, Quarterly Planning, OKRs
+- **Startup** — Idea Canvas, Pitch Flow, MVP Planning, Task Board
+- **General** — Flowchart, Kanban, Timeline
 
 Each template is generated as editable canvas objects rather than static images, allowing teams to immediately modify every element after insertion.
 
@@ -142,50 +154,45 @@ Each template is generated as editable canvas objects rather than static images,
 
 ## Currently in Development
 
-### Cross-Network P2P
+### Keet Identity
 
-Current collaboration is optimized for peers on the same local network. We're extending the networking layer to support seamless peer-to-peer collaboration across the public internet while keeping the same decentralized architecture.
-
-### AI Tactical Coach
-
-The current release focuses on AI chat. Next, we're enabling AI to interact directly with the whiteboard using tools.
-
-Planned capabilities include:
-
-- Generate complete tactical diagrams from prompts.
-- Create, position, and connect canvas objects automatically.
-- Annotate existing boards with tactical recommendations.
-- Analyze formations and identify weaknesses.
-- Suggest improvements based on the current board state.
-
-### Expanded Template Library
-
-We're extending Tamarind beyond the current four templates with additional tactical layouts for:
-
-- Basketball
-- Volleyball
-- Rugby
-- Baseball
-- Engineering architecture
-- Incident response
-- Product planning
-- Business strategy
+Portable identity across devices using a 24-word mnemonic phrase from Keet.
 
 ### Collaboration Enhancements
 
-Additional capabilities planned during the hackathon include:
+Additional capabilities planned:
 
 - Live cursor presence.
-- Snap-to-grid and smart alignment.
 - Group and ungroup objects.
 - Lock and hide objects.
 - Context menus.
 - Multi-room hosting with independent collaboration sessions.
-- Portable writer identities across devices.
 - Shared AI preferences replicated through Autobase.
 
 ## Architecture
- 
+
+### Feature Mapping
+
+| Feature | Description | Integration | Key Files |
+|---------|-------------|-------------|-----------|
+| **Shared Canvas** | Multi-board workspace with 6 shape types (rect, ellipse, text, note, connector, video) | None | `renderer/src/canvas/canvasReducer.ts`, `renderer/src/canvas/CanvasItems.tsx` |
+| **P2P Sync** | Autobase multi-writer log with HyperDB replicated state | Pears | `workers/tamarind-room.js`, `schema.js` |
+| **Invite Codes** | BlindPairing-based invite system for secure peer onboarding | Pears | `workers/tamarind-room.js`, `renderer/src/components/InviteJoinModal.tsx` |
+| **HyperDHT** | Hyperswarm-powered internet-wide peer discovery | Pears | `workers/tamarind-room-entry.js` |
+| **Identity** | Persistent display names via writer keypair + rename-self | Pears | `renderer/src/hooks/useRoom.ts`, `renderer/src/components/NameEditModal.tsx` |
+| **Local AI** | QVAC SDK integration with Qwen3-1.7B, Qwen3-4B, Gemma4-4B, Gemma4-31B | QVAC | `electron/qvac.js`, `electron/aiChat.js` |
+| **RAG** | Knowledge Base with GTE Large FP16 embeddings for semantic search | QVAC | `electron/ragStore.js`, `renderer/src/components/KnowledgeBaseModal.tsx` |
+| **Prompt-to-Canvas** | AI tool calling to create/update/remove shapes from chat | QVAC + Pears | `renderer/src/ai/tools.ts`, `electron/canvasTools.js` |
+| **AI Relay** | P2P relay for using peer's loaded model without local download | Pears + QVAC | `electron/aiChat.js`, `workers/tamarind-room.js` |
+| **Video Upload** | Hyperblobs-based video storage with blob server streaming | Pears | `workers/tamarind-room-entry.js`, `renderer/src/canvas/VideoShape.tsx` |
+| **Sticky Notes** | First-class note shape with folded corner effect | None | `renderer/src/canvas/shapes/NoteShape.tsx` |
+| **Multi-Board** | Board CRUD with last-board protection and cascade delete | None | `renderer/src/canvas/canvasReducer.ts`, `renderer/src/components/BoardsMenu.tsx` |
+| **Templates** | 23 templates across 7 categories (Sports, Marketing, Product, etc.) | None | `renderer/src/data/templates.ts`, `renderer/src/components/TemplatesModal.tsx` |
+| **Group Chat** | P2P persistent chat with writer identity resolution | Pears | `renderer/src/components/GroupChatPanel.tsx`, `workers/tamarind-room.js` |
+| **Export SVG/PNG** | Selection-aware canvas export to SVG or PNG | None | `renderer/src/canvas/svgExport.ts`, `renderer/src/components/ExportMenu.tsx` |
+| **Board Backup/Restore** | Single-board backup file with restore capability | None | `renderer/src/data/boardIO.ts`, `renderer/src/components/CanvasPage.tsx` |
+
+**Integration Key:** **Pears** = Holepunch stack (Hypercore, Autobase, HyperDB, Hyperswarm, Corestore) • **QVAC** = Local AI runtime (llama.cpp, Qwen3, Gemma4 models) • **None** = Pure frontend (React/TypeScript) • **Pears + QVAC** = Feature uses both stacks
 
 ### Wire protocol (renderer ↔ TamarindRoom worker)
 
@@ -293,7 +300,6 @@ Two sibling files live alongside the Corestore in `userData/`:
 | `npm run lint`               | `prettier --check . && lunte`                                    |
 | `npm run format`             | `prettier --write . && lunte --fix`                              |
 
-
 ## Troubleshooting
 
 ### "RangeError: Array buffer allocation failed" on insert
@@ -340,7 +346,7 @@ MIT
 
 ## Credits
 
-Tamarind is built on the open-source P2P stack from [Holepunch](https://holepunch.com):
+Tamarind is built on the open-source P2P stack from [Holepunch](https://holepunch.to/):
 
 - **[hello-pear-electron](https://github.com/holepunchto/hello-pear-electron)** — the upstream Electron + Pear template that Tamarind is forked from
 - **[pear-runtime][pear-runtime]** — P2P runtime that powers application updates

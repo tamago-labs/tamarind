@@ -17,6 +17,14 @@ export type RoomFrame =
   | { type: 'send-chat'; text: string }
   | { type: 'remove-chats'; ids: string[] }
   | { type: 'rename-self'; name: string }
+  | {
+      type: 'upload-media'
+      boardId: string
+      fileName: string
+      mimeType: string
+      size: number
+      data: Uint8Array
+    }
 
 // Inbound frames the worker pushes back. Discriminated by `type`.
 export type RoomEvent =
@@ -37,6 +45,25 @@ export type RoomEvent =
         accepting: boolean
       }>
     }
+  | {
+      type: 'identities'
+      identities: Array<{
+        writerKey: string
+        displayName: string
+        updatedAt: number
+      }>
+    }
+  | {
+      type: 'upload-complete'
+      boardId: string
+      fileName: string
+      mimeType: string
+      size: number
+      hyperdriveKey: string
+      filePath: string
+    }
+  | { type: 'upload-progress'; phase: string; fileName: string }
+  | { type: 'upload-error'; fileName: string; error: string }
 
 export interface SnapshotState {
   boards: BoardSnapshot[]
@@ -71,6 +98,13 @@ export interface BoardScopedItemSnapshot {
   fill?: string
   lineCap?: string
   fontSize?: number
+  textAlign?: string
+  textAlignVertical?: string
+  // Phase 4 video fields
+  videoUrl?: string
+  videoFileName?: string
+  videoMimeType?: string
+  videoSize?: number
   order: number
   updatedAt: number
 }

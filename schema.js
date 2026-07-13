@@ -81,6 +81,13 @@ schema.register({
     { name: 'strokePattern', type: 'string' },
     { name: 'curve', type: 'string' },
     { name: 'label', type: 'string' },
+    { name: 'textAlign', type: 'string' },
+    { name: 'textAlignVertical', type: 'string' },
+    // Phase 4 video-only fields.
+    { name: 'videoUrl', type: 'string' },
+    { name: 'videoFileName', type: 'string' },
+    { name: 'videoMimeType', type: 'string' },
+    { name: 'videoSize', type: 'int' },
     { name: 'order', type: 'int', required: true },
     { name: 'updatedAt', type: 'int', required: true }
   ]
@@ -245,6 +252,35 @@ schema.register({
   ]
 })
 
+// Phase 4: Portable identity. One row per writer key; the worker
+// upserts this whenever the local writer's display name changes.
+// Remote peers can resolve writer keys to display names.
+schema.register({
+  name: 'identity',
+  fields: [
+    { name: 'writerKey', type: 'buffer', required: true },
+    { name: 'displayName', type: 'string', required: true },
+    { name: 'updatedAt', type: 'int', required: true }
+  ]
+})
+
+// Phase 4: Media references. Video files stored in Hyperdrive,
+// metadata replicated via Autobase.
+schema.register({
+  name: 'media',
+  fields: [
+    { name: 'id', type: 'buffer', required: true },
+    { name: 'boardId', type: 'buffer', required: true },
+    { name: 'type', type: 'string', required: true },
+    { name: 'blob', type: 'json', required: true },
+    { name: 'fileName', type: 'string', required: true },
+    { name: 'mimeType', type: 'string', required: true },
+    { name: 'size', type: 'int', required: true },
+    { name: 'createdAt', type: 'int', required: true },
+    { name: 'createdBy', type: 'buffer', required: true }
+  ]
+})
+
 Hyperschema.toDisk(hyperSchema)
 
 // ── Collections ─────────────────────────────────────────────────────
@@ -305,6 +341,20 @@ db.collections.register({
   key: ['requestId']
 })
 
+// Phase 4: Portable identity. One row per writer key.
+db.collections.register({
+  name: 'identity',
+  schema: '@tamarind/identity',
+  key: ['writerKey']
+})
+
+// Phase 4: Media references. Video files stored in Hyperdrive.
+db.collections.register({
+  name: 'media',
+  schema: '@tamarind/media',
+  key: ['id']
+})
+
 HyperdbBuilder.toDisk(hyperdb)
 
 // ── Dispatch routes ────────────────────────────────────────────────
@@ -336,5 +386,9 @@ dispatch.register({ name: 'update-ai-state', requestType: '@tamarind/ai-state-up
 dispatch.register({ name: 'relay-request', requestType: '@tamarind/relay-request' })
 dispatch.register({ name: 'relay-response', requestType: '@tamarind/relay-response' })
 dispatch.register({ name: 'relay-cancel', requestType: '@tamarind/relay-cancel' })
+
+// Phase 4 routes. Identity and media.
+dispatch.register({ name: 'update-identity', requestType: '@tamarind/identity' })
+dispatch.register({ name: 'add-media', requestType: '@tamarind/media' })
 
 Hyperdispatch.toDisk(hyperdispatch)

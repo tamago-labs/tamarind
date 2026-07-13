@@ -84,8 +84,8 @@ const BUILTIN_PRESETS = [
   }
 ]
 
-/** @type {2048 | 4096 | 8192} */
-const DEFAULT_CTX_SIZE = 4096
+/** @type {2048 | 4096 | 8192 | 16384} */
+const DEFAULT_CTX_SIZE = 8192
 
 function deriveSourceKind(src) {
   if (src.startsWith('registry://')) return 'registry'
@@ -330,7 +330,8 @@ class ModelStore {
   setAiConfig(config) {
     this.state.aiConfig = {
       ctx_size: config.ctx_size,
-      tools: config.tools
+      tools: config.tools,
+      knowledgeBase: config.knowledgeBase
     }
     this.save()
   }

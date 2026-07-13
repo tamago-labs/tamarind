@@ -34,6 +34,25 @@ export interface Pkg {
   [key: string]: unknown
 }
 
+export interface RagSearchResult {
+  content: string
+  score: number
+}
+
+export interface RagDocument {
+  id: string
+  name: string
+  source: 'text' | 'url'
+  createdAt: string
+}
+
+export interface PreDataCategory {
+  id: string
+  name: string
+  fileCount: number
+  imported: boolean
+}
+
 export interface BridgeAPI {
   pkg(): Pkg
   applyUpdate(): Promise<void>
@@ -81,6 +100,10 @@ export interface BridgeAPI {
     onDone(cb: (e: ChatDoneEvent) => void): () => void
     onError(cb: (e: ChatErrorEvent) => void): () => void
     onStatus(cb: (e: ChatStatusEvent) => void): () => void
+    onToolCall(
+      cb: (e: { requestId: string; name: string; args: Record<string, unknown> }) => void
+    ): () => void
+    sendToolResult(requestId: string, result: unknown): void
   }
   // Phase 6: file-based AI chat session store. NOT P2P-replicated.
   sessions: {
@@ -147,6 +170,34 @@ export interface BridgeAPI {
       error?: { code: string; message: string; retryable: boolean } | null
     }) => void
   ): () => void
+
+  rag: {
+    model: {
+      load(args?: {
+        onProgress?: (p: number) => void
+      }): Promise<{ success: boolean; error?: string }>
+      unload(): Promise<{ success: boolean; error?: string }>
+      status(): Promise<'unloaded' | 'loading' | 'ready'>
+    }
+    ingest(args: {
+      name: string
+      content: string
+      source?: string
+    }): Promise<{ success: boolean; processed?: number; error?: string }>
+    search(args: {
+      query: string
+      topK?: number
+    }): Promise<{ success: boolean; results?: RagSearchResult[]; error?: string }>
+    list(): Promise<RagDocument[]>
+    delete(args: { id: string }): Promise<{ success: boolean; error?: string }>
+    fetchUrl(args: { url: string }): Promise<{ success: boolean; content?: string; error?: string }>
+    predata: {
+      categories(): Promise<PreDataCategory[]>
+      import(args: {
+        categoryId: string
+      }): Promise<{ success: boolean; imported?: number; error?: string }>
+    }
+  }
 }
 
 // Worker specifiers. Picked by the renderer when calling
@@ -214,7 +265,9 @@ const noopBridge: BridgeAPI = {
     onStats: () => () => {},
     onDone: () => () => {},
     onError: () => () => {},
-    onStatus: () => () => {}
+    onStatus: () => () => {},
+    onToolCall: () => () => {},
+    sendToolResult: () => {}
   },
   sessions: {
     list: () => Promise.resolve([]),
@@ -232,7 +285,23 @@ const noopBridge: BridgeAPI = {
     route: () => Promise.resolve({ success: false, error: 'bridge not available' }),
     routeCancel: () => Promise.resolve({ success: false })
   },
-  onRelayEvent: () => () => {}
+  onRelayEvent: () => () => {},
+  rag: {
+    model: {
+      load: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+      unload: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+      status: () => Promise.resolve('unloaded')
+    },
+    ingest: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+    search: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+    list: () => Promise.resolve([]),
+    delete: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+    fetchUrl: () => Promise.resolve({ success: false, error: 'bridge not available' }),
+    predata: {
+      categories: () => Promise.resolve([]),
+      import: () => Promise.resolve({ success: false, error: 'bridge not available' })
+    }
+  }
 }
 
 export const bridge: BridgeAPI =

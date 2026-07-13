@@ -13,11 +13,13 @@ const {
   setStreamingNow,
   mapError,
   buildStatus,
-  resetCache
+  resetCache,
+  clearAllCache
 } = require('./qvac')
 const { modelStore } = require('./modelStore')
 const aiChat = require('./aiChat')
 const sessions = require('./sessions')
+const ragStore = require('./ragStore')
 const path = require('path')
 const PearRuntime = require('pear-runtime')
 const FramedStream = require('framed-stream')
@@ -266,7 +268,8 @@ async function createWindow() {
       preload: path.join(__dirname, '..', 'electron', 'preload.js'),
       sandbox: true,
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      webSecurity: false
     }
   })
 
@@ -393,6 +396,7 @@ function registerModelsIpc() {
       // modelStore so the next launch picks up the same defaults.
       const config = modelStore.getAiConfig()
       setActiveConfig(config)
+      await clearAllCache()
       await ensureModel(entry)
       // Phase 7: broadcast the new AI state to peers via the worker.
       pushAiStateToRoomWorker()
@@ -445,12 +449,13 @@ function registerModelsIpc() {
   ipcMain.handle('ai-config:get', () => modelStore.getAiConfig())
   ipcMain.handle('ai-config:set', (_evt, config) => {
     const ctx = Number(config?.ctx_size)
-    if (![2048, 4096, 8192].includes(ctx)) {
+    if (![2048, 4096, 8192, 16384].includes(ctx)) {
       throw new Error(`Unsupported ctx_size: ${config?.ctx_size}`)
     }
     const tools = !!config?.tools
-    modelStore.setAiConfig({ ctx_size: ctx, tools })
-    setActiveConfig({ ctx_size: ctx, tools })
+    const knowledgeBase = !!config?.knowledgeBase
+    modelStore.setAiConfig({ ctx_size: ctx, tools, knowledgeBase })
+    setActiveConfig({ ctx_size: ctx, tools, knowledgeBase })
     return { success: true }
   })
 
@@ -478,6 +483,19 @@ function registerChatIpc() {
   })
   ipcMain.handle('chat:cancel', () => aiChat.cancelMessage())
   ipcMain.handle('chat:status', () => aiChat.getStatus())
+
+  // Tool result response from renderer — used by canvasTools.js
+  // to forward tool execution results back to the AI completion.
+  const toolResultHandlers = new Map()
+  ipcMain.handle('chat:toolResult:response', (_evt, result) => {
+    // Store the result so canvasTools.js can retrieve it
+    const resolve = toolResultHandlers.get('current')
+    if (resolve) {
+      toolResultHandlers.delete('current')
+      resolve(result)
+    }
+    return { success: true }
+  })
 
   // Phase 8: route a chat completion to a peer's loaded model over
   // the Autobase. `args.targetWriterKey` is the z32-encoded writer
@@ -515,6 +533,60 @@ function registerChatIpc() {
   // Push channel subscription — see `onPeerAiStates` below.
 
   console.log('AI chat / sessions IPC handlers registered')
+}
+
+function registerRagIpc() {
+  ipcMain.handle('rag:model:load', async (_evt, args) => {
+    try {
+      await ragStore.ensureEmbeddingModel(args?.onProgress)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('rag:model:unload', async () => {
+    try {
+      await ragStore.unloadEmbeddingModel()
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  })
+
+  ipcMain.handle('rag:model:status', async () => {
+    return ragStore.getModelStatus()
+  })
+
+  ipcMain.handle('rag:ingest', async (_evt, args) => {
+    return ragStore.ingestDocument(args.name, args.content, args.source)
+  })
+
+  ipcMain.handle('rag:search', async (_evt, args) => {
+    return ragStore.searchDocuments(args.query, args.topK)
+  })
+
+  ipcMain.handle('rag:list', async () => {
+    return ragStore.listDocuments()
+  })
+
+  ipcMain.handle('rag:fetch-url', async (_evt, args) => {
+    return ragStore.fetchUrlContent(args.url)
+  })
+
+  ipcMain.handle('rag:delete', async (_evt, args) => {
+    return ragStore.deleteDocument(args.id)
+  })
+
+  ipcMain.handle('rag:predata:categories', () => {
+    return ragStore.getPreDataCategories()
+  })
+
+  ipcMain.handle('rag:predata:import', async (_evt, args) => {
+    return ragStore.importPreDataCategory(args.categoryId)
+  })
+
+  console.log('RAG / Knowledge Base IPC handlers registered')
 }
 
 // ──────────────────── AI state broadcast (Phase 7) ────────────────────
@@ -699,7 +771,7 @@ async function handleRelayRun({ requestId, fromKey, messages, modelId }) {
 
   function flushBuffered() {
     if (entry.closed) return
-    if (entry.pendingText == null && entry.pendingKind == null) return
+    if (entry.pendingText === null && entry.pendingKind === null) return
     const pipe = workers.get(roomWorkerSpecifier)?.pipe
     if (!pipe) return
     try {
@@ -710,7 +782,7 @@ async function handleRelayRun({ requestId, fromKey, messages, modelId }) {
           fromKey: entry.toKeyHex,
           toKey: entry.fromKeyHex,
           kind: entry.pendingKind,
-          ...(entry.pendingText != null ? { text: entry.pendingText } : {})
+          ...(entry.pendingText !== null ? { text: entry.pendingText } : {})
         })
       )
     } catch (err) {
@@ -910,6 +982,7 @@ if (!lock) {
     // first invoke; the renderer's useAI() hydrates status() on mount.
     registerModelsIpc()
     registerChatIpc()
+    registerRagIpc()
 
     // Create the 'main' AI chat session directory + empty
     // messages.json so the first `sessions:list` from the renderer

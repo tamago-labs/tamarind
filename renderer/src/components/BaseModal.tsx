@@ -104,7 +104,7 @@ export function BaseModal({
             exit={{ opacity: 0, scale: 0.96, y: 4 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
             onClick={(e) => e.stopPropagation()}
-            className={`w-full max-w-md rounded-lg border p-6 shadow-2xl ${variantClass} ${className}`}
+            className={`w-full max-w-md max-h-[calc(100vh-2rem)] flex flex-col rounded-lg border p-6 shadow-2xl ${variantClass} ${className}`}
           >
             <div className='flex items-start justify-between gap-4'>
               <div className='flex min-w-0 flex-1 flex-col gap-0.5'>

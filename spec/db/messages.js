@@ -106,7 +106,13 @@ const encoding3 = {
       (m.arrowEnd ? 512 : 0) |
       (m.strokePattern ? 1024 : 0) |
       (m.curve ? 2048 : 0) |
-      (m.label ? 4096 : 0)
+      (m.label ? 4096 : 0) |
+      (m.textAlign ? 8192 : 0) |
+      (m.textAlignVertical ? 16384 : 0) |
+      (m.videoUrl ? 32768 : 0) |
+      (m.videoFileName ? 65536 : 0) |
+      (m.videoMimeType ? 131072 : 0) |
+      (m.videoSize ? 262144 : 0)
 
     c.buffer.preencode(state, m.id)
     c.buffer.preencode(state, m.boardId)
@@ -130,6 +136,12 @@ const encoding3 = {
     if (m.strokePattern) c.string.preencode(state, m.strokePattern)
     if (m.curve) c.string.preencode(state, m.curve)
     if (m.label) c.string.preencode(state, m.label)
+    if (m.textAlign) c.string.preencode(state, m.textAlign)
+    if (m.textAlignVertical) c.string.preencode(state, m.textAlignVertical)
+    if (m.videoUrl) c.string.preencode(state, m.videoUrl)
+    if (m.videoFileName) c.string.preencode(state, m.videoFileName)
+    if (m.videoMimeType) c.string.preencode(state, m.videoMimeType)
+    if (m.videoSize) c.int.preencode(state, m.videoSize)
     c.int.preencode(state, m.order)
     c.int.preencode(state, m.updatedAt)
   },
@@ -147,7 +159,13 @@ const encoding3 = {
       (m.arrowEnd ? 512 : 0) |
       (m.strokePattern ? 1024 : 0) |
       (m.curve ? 2048 : 0) |
-      (m.label ? 4096 : 0)
+      (m.label ? 4096 : 0) |
+      (m.textAlign ? 8192 : 0) |
+      (m.textAlignVertical ? 16384 : 0) |
+      (m.videoUrl ? 32768 : 0) |
+      (m.videoFileName ? 65536 : 0) |
+      (m.videoMimeType ? 131072 : 0) |
+      (m.videoSize ? 262144 : 0)
 
     c.buffer.encode(state, m.id)
     c.buffer.encode(state, m.boardId)
@@ -171,6 +189,12 @@ const encoding3 = {
     if (m.strokePattern) c.string.encode(state, m.strokePattern)
     if (m.curve) c.string.encode(state, m.curve)
     if (m.label) c.string.encode(state, m.label)
+    if (m.textAlign) c.string.encode(state, m.textAlign)
+    if (m.textAlignVertical) c.string.encode(state, m.textAlignVertical)
+    if (m.videoUrl) c.string.encode(state, m.videoUrl)
+    if (m.videoFileName) c.string.encode(state, m.videoFileName)
+    if (m.videoMimeType) c.string.encode(state, m.videoMimeType)
+    if (m.videoSize) c.int.encode(state, m.videoSize)
     c.int.encode(state, m.order)
     c.int.encode(state, m.updatedAt)
   },
@@ -203,6 +227,12 @@ const encoding3 = {
       strokePattern: (flags & 1024) !== 0 ? c.string.decode(state) : null,
       curve: (flags & 2048) !== 0 ? c.string.decode(state) : null,
       label: (flags & 4096) !== 0 ? c.string.decode(state) : null,
+      textAlign: (flags & 8192) !== 0 ? c.string.decode(state) : null,
+      textAlignVertical: (flags & 16384) !== 0 ? c.string.decode(state) : null,
+      videoUrl: (flags & 32768) !== 0 ? c.string.decode(state) : null,
+      videoFileName: (flags & 65536) !== 0 ? c.string.decode(state) : null,
+      videoMimeType: (flags & 131072) !== 0 ? c.string.decode(state) : null,
+      videoSize: (flags & 262144) !== 0 ? c.int.decode(state) : 0,
       order: c.int.decode(state),
       updatedAt: c.int.decode(state)
     }
@@ -549,8 +579,82 @@ const encoding17 = {
   }
 }
 
-// @tamarind/board/hyperdb#0
+// @tamarind/identity
 const encoding18 = {
+  preencode(state, m) {
+    c.buffer.preencode(state, m.writerKey)
+    c.string.preencode(state, m.displayName)
+    c.int.preencode(state, m.updatedAt)
+  },
+  encode(state, m) {
+    c.buffer.encode(state, m.writerKey)
+    c.string.encode(state, m.displayName)
+    c.int.encode(state, m.updatedAt)
+  },
+  decode(state) {
+    const r0 = c.buffer.decode(state)
+    const r1 = c.string.decode(state)
+    const r2 = c.int.decode(state)
+
+    return {
+      writerKey: r0,
+      displayName: r1,
+      updatedAt: r2
+    }
+  }
+}
+
+// @tamarind/media
+const encoding19 = {
+  preencode(state, m) {
+    c.buffer.preencode(state, m.id)
+    c.buffer.preencode(state, m.boardId)
+    c.string.preencode(state, m.type)
+    c.json.preencode(state, m.blob)
+    c.string.preencode(state, m.fileName)
+    c.string.preencode(state, m.mimeType)
+    c.int.preencode(state, m.size)
+    c.int.preencode(state, m.createdAt)
+    c.buffer.preencode(state, m.createdBy)
+  },
+  encode(state, m) {
+    c.buffer.encode(state, m.id)
+    c.buffer.encode(state, m.boardId)
+    c.string.encode(state, m.type)
+    c.json.encode(state, m.blob)
+    c.string.encode(state, m.fileName)
+    c.string.encode(state, m.mimeType)
+    c.int.encode(state, m.size)
+    c.int.encode(state, m.createdAt)
+    c.buffer.encode(state, m.createdBy)
+  },
+  decode(state) {
+    const r0 = c.buffer.decode(state)
+    const r1 = c.buffer.decode(state)
+    const r2 = c.string.decode(state)
+    const r3 = c.json.decode(state)
+    const r4 = c.string.decode(state)
+    const r5 = c.string.decode(state)
+    const r6 = c.int.decode(state)
+    const r7 = c.int.decode(state)
+    const r8 = c.buffer.decode(state)
+
+    return {
+      id: r0,
+      boardId: r1,
+      type: r2,
+      blob: r3,
+      fileName: r4,
+      mimeType: r5,
+      size: r6,
+      createdAt: r7,
+      createdBy: r8
+    }
+  }
+}
+
+// @tamarind/board/hyperdb#0
+const encoding20 = {
   preencode(state, m) {
     c.string.preencode(state, m.name)
     c.int.preencode(state, m.createdAt)
@@ -580,7 +684,7 @@ const encoding18 = {
 }
 
 // @tamarind/item/hyperdb#1
-const encoding19 = {
+const encoding21 = {
   preencode(state, m) {
     const flags =
       (m.w ? 1 : 0) |
@@ -595,7 +699,13 @@ const encoding19 = {
       (m.arrowEnd ? 512 : 0) |
       (m.strokePattern ? 1024 : 0) |
       (m.curve ? 2048 : 0) |
-      (m.label ? 4096 : 0)
+      (m.label ? 4096 : 0) |
+      (m.textAlign ? 8192 : 0) |
+      (m.textAlignVertical ? 16384 : 0) |
+      (m.videoUrl ? 32768 : 0) |
+      (m.videoFileName ? 65536 : 0) |
+      (m.videoMimeType ? 131072 : 0) |
+      (m.videoSize ? 262144 : 0)
 
     c.buffer.preencode(state, m.boardId)
     c.string.preencode(state, m.type)
@@ -618,6 +728,12 @@ const encoding19 = {
     if (m.strokePattern) c.string.preencode(state, m.strokePattern)
     if (m.curve) c.string.preencode(state, m.curve)
     if (m.label) c.string.preencode(state, m.label)
+    if (m.textAlign) c.string.preencode(state, m.textAlign)
+    if (m.textAlignVertical) c.string.preencode(state, m.textAlignVertical)
+    if (m.videoUrl) c.string.preencode(state, m.videoUrl)
+    if (m.videoFileName) c.string.preencode(state, m.videoFileName)
+    if (m.videoMimeType) c.string.preencode(state, m.videoMimeType)
+    if (m.videoSize) c.int.preencode(state, m.videoSize)
     c.int.preencode(state, m.order)
     c.int.preencode(state, m.updatedAt)
   },
@@ -635,7 +751,13 @@ const encoding19 = {
       (m.arrowEnd ? 512 : 0) |
       (m.strokePattern ? 1024 : 0) |
       (m.curve ? 2048 : 0) |
-      (m.label ? 4096 : 0)
+      (m.label ? 4096 : 0) |
+      (m.textAlign ? 8192 : 0) |
+      (m.textAlignVertical ? 16384 : 0) |
+      (m.videoUrl ? 32768 : 0) |
+      (m.videoFileName ? 65536 : 0) |
+      (m.videoMimeType ? 131072 : 0) |
+      (m.videoSize ? 262144 : 0)
 
     c.buffer.encode(state, m.boardId)
     c.string.encode(state, m.type)
@@ -658,6 +780,12 @@ const encoding19 = {
     if (m.strokePattern) c.string.encode(state, m.strokePattern)
     if (m.curve) c.string.encode(state, m.curve)
     if (m.label) c.string.encode(state, m.label)
+    if (m.textAlign) c.string.encode(state, m.textAlign)
+    if (m.textAlignVertical) c.string.encode(state, m.textAlignVertical)
+    if (m.videoUrl) c.string.encode(state, m.videoUrl)
+    if (m.videoFileName) c.string.encode(state, m.videoFileName)
+    if (m.videoMimeType) c.string.encode(state, m.videoMimeType)
+    if (m.videoSize) c.int.encode(state, m.videoSize)
     c.int.encode(state, m.order)
     c.int.encode(state, m.updatedAt)
   },
@@ -689,6 +817,12 @@ const encoding19 = {
       strokePattern: (flags & 1024) !== 0 ? c.string.decode(state) : null,
       curve: (flags & 2048) !== 0 ? c.string.decode(state) : null,
       label: (flags & 4096) !== 0 ? c.string.decode(state) : null,
+      textAlign: (flags & 8192) !== 0 ? c.string.decode(state) : null,
+      textAlignVertical: (flags & 16384) !== 0 ? c.string.decode(state) : null,
+      videoUrl: (flags & 32768) !== 0 ? c.string.decode(state) : null,
+      videoFileName: (flags & 65536) !== 0 ? c.string.decode(state) : null,
+      videoMimeType: (flags & 131072) !== 0 ? c.string.decode(state) : null,
+      videoSize: (flags & 262144) !== 0 ? c.int.decode(state) : 0,
       order: c.int.decode(state),
       updatedAt: c.int.decode(state)
     }
@@ -696,7 +830,7 @@ const encoding19 = {
 }
 
 // @tamarind/chat-msg/hyperdb#2
-const encoding20 = {
+const encoding22 = {
   preencode(state, m) {
     c.string.preencode(state, m.text)
     state.end++ // max flag is 1 so always one byte
@@ -724,7 +858,7 @@ const encoding20 = {
 }
 
 // @tamarind/invite/hyperdb#3
-const encoding21 = {
+const encoding23 = {
   preencode(state, m) {
     c.buffer.preencode(state, m.invite)
     c.buffer.preencode(state, m.publicKey)
@@ -750,7 +884,7 @@ const encoding21 = {
 }
 
 // @tamarind/ai-state/hyperdb#4
-const encoding22 = {
+const encoding24 = {
   preencode(state, m) {
     state.end++ // max flag is 8 so always one byte
 
@@ -782,7 +916,7 @@ const encoding22 = {
 }
 
 // @tamarind/relay-request/hyperdb#5
-const encoding23 = {
+const encoding25 = {
   preencode(state, m) {
     c.buffer.preencode(state, m.fromKey)
     c.buffer.preencode(state, m.toKey)
@@ -816,7 +950,7 @@ const encoding23 = {
 }
 
 // @tamarind/relay-response/hyperdb#6
-const encoding24 = {
+const encoding26 = {
   preencode(state, m) {
     c.buffer.preencode(state, m.toKey)
     c.string.preencode(state, m.kind)
@@ -852,7 +986,7 @@ const encoding24 = {
 }
 
 // @tamarind/relay-cancel/hyperdb#7
-const encoding25 = {
+const encoding27 = {
   preencode(state, m) {
     c.buffer.preencode(state, m.fromKey)
     c.buffer.preencode(state, m.toKey)
@@ -869,6 +1003,74 @@ const encoding25 = {
       requestId: null,
       fromKey: r1,
       toKey: r2
+    }
+  }
+}
+
+// @tamarind/identity/hyperdb#8
+const encoding28 = {
+  preencode(state, m) {
+    c.string.preencode(state, m.displayName)
+    c.int.preencode(state, m.updatedAt)
+  },
+  encode(state, m) {
+    c.string.encode(state, m.displayName)
+    c.int.encode(state, m.updatedAt)
+  },
+  decode(state) {
+    const r1 = c.string.decode(state)
+    const r2 = c.int.decode(state)
+
+    return {
+      writerKey: null,
+      displayName: r1,
+      updatedAt: r2
+    }
+  }
+}
+
+// @tamarind/media/hyperdb#9
+const encoding29 = {
+  preencode(state, m) {
+    c.buffer.preencode(state, m.boardId)
+    c.string.preencode(state, m.type)
+    c.json.preencode(state, m.blob)
+    c.string.preencode(state, m.fileName)
+    c.string.preencode(state, m.mimeType)
+    c.int.preencode(state, m.size)
+    c.int.preencode(state, m.createdAt)
+    c.buffer.preencode(state, m.createdBy)
+  },
+  encode(state, m) {
+    c.buffer.encode(state, m.boardId)
+    c.string.encode(state, m.type)
+    c.json.encode(state, m.blob)
+    c.string.encode(state, m.fileName)
+    c.string.encode(state, m.mimeType)
+    c.int.encode(state, m.size)
+    c.int.encode(state, m.createdAt)
+    c.buffer.encode(state, m.createdBy)
+  },
+  decode(state) {
+    const r1 = c.buffer.decode(state)
+    const r2 = c.string.decode(state)
+    const r3 = c.json.decode(state)
+    const r4 = c.string.decode(state)
+    const r5 = c.string.decode(state)
+    const r6 = c.int.decode(state)
+    const r7 = c.int.decode(state)
+    const r8 = c.buffer.decode(state)
+
+    return {
+      id: null,
+      boardId: r1,
+      type: r2,
+      blob: r3,
+      fileName: r4,
+      mimeType: r5,
+      size: r6,
+      createdAt: r7,
+      createdBy: r8
     }
   }
 }
@@ -932,22 +1134,30 @@ function getEncoding(name) {
       return encoding16
     case '@tamarind/relay-cancel':
       return encoding17
-    case '@tamarind/board/hyperdb#0':
+    case '@tamarind/identity':
       return encoding18
-    case '@tamarind/item/hyperdb#1':
+    case '@tamarind/media':
       return encoding19
-    case '@tamarind/chat-msg/hyperdb#2':
+    case '@tamarind/board/hyperdb#0':
       return encoding20
-    case '@tamarind/invite/hyperdb#3':
+    case '@tamarind/item/hyperdb#1':
       return encoding21
-    case '@tamarind/ai-state/hyperdb#4':
+    case '@tamarind/chat-msg/hyperdb#2':
       return encoding22
-    case '@tamarind/relay-request/hyperdb#5':
+    case '@tamarind/invite/hyperdb#3':
       return encoding23
-    case '@tamarind/relay-response/hyperdb#6':
+    case '@tamarind/ai-state/hyperdb#4':
       return encoding24
-    case '@tamarind/relay-cancel/hyperdb#7':
+    case '@tamarind/relay-request/hyperdb#5':
       return encoding25
+    case '@tamarind/relay-response/hyperdb#6':
+      return encoding26
+    case '@tamarind/relay-cancel/hyperdb#7':
+      return encoding27
+    case '@tamarind/identity/hyperdb#8':
+      return encoding28
+    case '@tamarind/media/hyperdb#9':
+      return encoding29
     default:
       throw new Error('Encoder not found ' + name)
   }

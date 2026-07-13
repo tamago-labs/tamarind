@@ -47,6 +47,7 @@ export interface RoomState {
   snapshot: SnapshotState | null
   chat: ChatMessage[]
   peerAiStates: PeerAiState[]
+  identities: Map<string, { displayName: string; updatedAt: number }>
   error: string | null
 }
 
@@ -60,6 +61,7 @@ const initialState: RoomState = {
   snapshot: null,
   chat: [],
   peerAiStates: [],
+  identities: new Map(),
   error: null
 }
 
@@ -73,6 +75,9 @@ const initialState: RoomState = {
 // changed, please re-render".
 const store: RoomState & { version: number } = { ...initialState, version: 0 }
 const listeners = new Set<() => void>()
+
+// Track active board ID separately from snapshot (snapshot doesn't track it)
+let trackedActiveBoardId: string | null = null
 
 let startPromise: Promise<boolean> | null = null
 let unsubscribe: (() => void) | null = null
@@ -110,6 +115,14 @@ function apply(event: RoomEvent) {
       break
     case 'ai-states':
       store.peerAiStates = Array.isArray(event.states) ? event.states : []
+      break
+    case 'identities':
+      store.identities = new Map(
+        (event.identities || []).map((id) => [
+          id.writerKey,
+          { displayName: id.displayName, updatedAt: id.updatedAt }
+        ])
+      )
       break
   }
   bumpAndEmit()
@@ -199,6 +212,21 @@ const subscribe = (cb: () => void) => {
   }
 }
 const getSnapshot = () => store.version
+
+// Get the active board ID from the room store (for use outside React hooks)
+export function getActiveBoardId(): string | null {
+  return trackedActiveBoardId ?? store.snapshot?.activeBoardId ?? null
+}
+
+// Set the active board ID tracker (called when user switches boards)
+export function setActiveBoardTracker(id: string | null): void {
+  trackedActiveBoardId = id
+}
+
+// Get the current room snapshot (for use outside React hooks)
+export function getRoomSnapshot(): SnapshotState | null {
+  return store.snapshot
+}
 
 // Test hook — let CDP-driven smoke tests fire actions directly past the
 // UI guards. Mirrors the filter in `sendAction` so we send exactly the
@@ -301,6 +329,21 @@ export function useRoom(): RoomState & {
     })
   }, [])
 
+  const uploadMedia = useCallback(
+    (frame: {
+      boardId: string
+      fileName: string
+      mimeType: string
+      size: number
+      data: Uint8Array
+    }) => {
+      writeRoom({ type: 'upload-media', ...frame }).catch((err) => {
+        console.error('[tamarind] uploadMedia failed:', err)
+      })
+    },
+    []
+  )
+
   const joinInvite = useCallback((invite: string) => {
     // Tells main.js to kill + respawn the room worker with `--invite
     // <code>`. The renderer doesn't wait — the worker exit / restart
@@ -333,11 +376,13 @@ export function useRoom(): RoomState & {
     snapshot: store.snapshot,
     chat: store.chat,
     peerAiStates: store.peerAiStates,
+    identities: store.identities,
     error: store.error,
     sendAction,
     sendChat,
     removeChats,
     clearChat,
+    uploadMedia,
     joinInvite,
     createInvite,
     renameSelf

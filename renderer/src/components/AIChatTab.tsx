@@ -19,25 +19,29 @@
 // is the hand-off into the Workspace tab.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronRight, FileText, Plus, Send, Square, Trash2, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, FileText, Plus, Send, Settings, Square, X } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useAI } from '../hooks/useAI'
 import { useAIChat } from '../hooks/useAIChat'
+import { useRoom } from '../hooks/useRoom'
+import { bridge } from '../lib/bridge'
+import { DEFAULT_AI_CONFIG } from '../ai/types'
 import type { ChatTurn } from '../ai/types'
 
-interface AIChatTabProps {
-  onSwitchToSetup?: () => void
-}
+interface AIChatTabProps {}
 
-export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
+export function AIChatTab(_props: AIChatTabProps) {
   const ai = useAI()
   const chat = useAIChat()
+  const room = useRoom()
   const listRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [draft, setDraft] = useState('')
-  const [confirmingClear, setConfirmingClear] = useState(false)
+
   const [showSessionMenu, setShowSessionMenu] = useState(false)
+  const [showSourceMenu, setShowSourceMenu] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
 
   // Auto-scroll to the bottom of the message list on new content.
   useEffect(() => {
@@ -46,19 +50,40 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
     el.scrollTop = el.scrollHeight
   }, [chat.messages.length, chat.streamingContent, chat.streamingThinking])
 
-  // Auto-dismiss the destructive confirms after 4s.
-  useEffect(() => {
-    if (!confirmingClear) return
-    const t = setTimeout(() => setConfirmingClear(false), 4000)
-    return () => clearTimeout(t)
-  }, [confirmingClear])
-
   const currentSession = useMemo(
     () => chat.sessions.find((s) => s.slug === chat.currentSessionSlug) ?? null,
     [chat.sessions, chat.currentSessionSlug]
   )
   const sessionLabel =
     currentSession?.slug === 'main' ? 'Main (default)' : (currentSession?.slug ?? '…')
+
+  // Source picker logic (moved from SetupTab)
+  const localKey = room.me?.key
+  const hostState = room.peerAiStates.find((s) => s.writerKey !== localKey) ?? null
+  const hostHasModel = !!(hostState?.modelId && hostState?.modelName)
+
+  function selectLocalSource() {
+    if (!ai.activeModel) return
+    chat.setAiSource({
+      kind: 'local',
+      modelId: ai.activeModel.id,
+      modelName: ai.activeModel.name
+    })
+  }
+
+  function selectHostSource() {
+    if (!hostState) return
+    chat.setAiSource({
+      kind: 'peer',
+      writerKey: hostState.writerKey,
+      modelId: hostState.modelId ?? '',
+      modelName: hostState.modelName ?? 'Host model'
+    })
+  }
+
+  function clearSource() {
+    chat.setAiSource(null)
+  }
 
   function handleSend() {
     const text = draft.trim()
@@ -68,12 +93,7 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
   }
 
   function handleClear() {
-    if (confirmingClear) {
-      setConfirmingClear(false)
-      void chat.clearSession(chat.currentSessionSlug)
-      return
-    }
-    setConfirmingClear(true)
+    void chat.clearSession(chat.currentSessionSlug)
   }
 
   async function handleDeleteSession(slug: string) {
@@ -99,7 +119,7 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
 
   const inputPlaceholder = isInputDisabled
     ? !chat.aiSource
-      ? 'Pick a source in Workspace first.'
+      ? 'Pick an AI source above.'
       : chat.aiSource.kind === 'local' && !ai.isReady
         ? 'No model loaded on this device.'
         : 'Type a message…'
@@ -107,7 +127,7 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
 
   return (
     <div className='flex h-full flex-col gap-2'>
-      {/* ── Session bar ───────────────────────────────────────── */}
+      {/* ── Session bar + Source button + Settings ──────────────── */}
       <div className='flex items-center gap-1.5'>
         <div className='relative flex-1'>
           <button
@@ -135,26 +155,274 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
             />
           )}
         </div>
-        <button
-          type='button'
-          onClick={handleClear}
-          disabled={!currentSession || currentSession.messageCount === 0 || chat.isStreaming}
-          aria-label={confirmingClear ? 'Confirm clear messages' : 'Clear messages'}
-          title={
-            confirmingClear
-              ? 'Click again to confirm'
-              : currentSession && currentSession.messageCount > 0
-                ? 'Clear all messages in this session'
-                : 'No messages to clear'
-          }
-          className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed ${
-            confirmingClear
-              ? 'border-red-600 bg-red-600 text-white hover:bg-red-700'
-              : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 disabled:text-gray-300'
-          }`}
-        >
-          <Trash2 className='h-3.5 w-3.5' aria-hidden='true' />
-        </button>
+
+        {/* ── Source button + popover ────────────────────────────── */}
+        <div className='relative'>
+          <button
+            type='button'
+            onClick={() => setShowSourceMenu((v) => !v)}
+            aria-label='Select AI source'
+            title='Select AI source'
+            className={`inline-flex h-7 items-center gap-1 rounded-md border px-2 text-[10px] font-medium transition focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              chat.aiSource
+                ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {chat.aiSource ? (chat.aiSource.kind === 'local' ? 'Local' : 'Host') : 'Source'}
+            <ChevronDown className='h-3 w-3' />
+          </button>
+          {showSourceMenu && (
+            <div className='absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-md border border-gray-200 bg-white shadow-md'>
+              <div className='p-2'>
+                <div className='mb-1.5 flex items-center justify-between'>
+                  <span className='text-[10px] font-semibold uppercase tracking-wide text-gray-500'>
+                    AI Source
+                  </span>
+                  {chat.aiSource && (
+                    <button
+                      type='button'
+                      onClick={() => {
+                        clearSource()
+                        setShowSourceMenu(false)
+                      }}
+                      className='text-[10px] font-semibold uppercase tracking-wide text-gray-500 transition hover:text-red-600'
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div className='flex flex-col gap-1'>
+                  <button
+                    type='button'
+                    onClick={() => {
+                      selectLocalSource()
+                      setShowSourceMenu(false)
+                    }}
+                    disabled={!ai.activeModel}
+                    aria-pressed={chat.aiSource?.kind === 'local'}
+                    className={
+                      chat.aiSource?.kind === 'local'
+                        ? 'flex w-full items-center gap-2 rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-left text-xs transition disabled:cursor-not-allowed disabled:opacity-60'
+                        : 'flex w-full items-center gap-2 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-left text-xs transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60'
+                    }
+                  >
+                    <span
+                      className={`inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-full border-2 ${
+                        chat.aiSource?.kind === 'local'
+                          ? 'border-blue-500 bg-blue-500'
+                          : 'border-gray-300 bg-white'
+                      }`}
+                    >
+                      {chat.aiSource?.kind === 'local' && (
+                        <span className='h-1.5 w-1.5 rounded-full bg-white' />
+                      )}
+                    </span>
+                    <span className='min-w-0 flex-1'>
+                      <span className='font-medium'>Local</span>
+                      <span className='ml-1 text-gray-500'>— This device</span>
+                    </span>
+                  </button>
+                  <button
+                    type='button'
+                    onClick={() => {
+                      selectHostSource()
+                      setShowSourceMenu(false)
+                    }}
+                    disabled={!hostHasModel}
+                    aria-pressed={chat.aiSource?.kind === 'peer'}
+                    className={
+                      chat.aiSource?.kind === 'peer'
+                        ? 'flex w-full items-center gap-2 rounded-md border border-blue-300 bg-blue-50 px-2 py-1.5 text-left text-xs transition disabled:cursor-not-allowed disabled:opacity-60'
+                        : 'flex w-full items-center gap-2 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-left text-xs transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60'
+                    }
+                  >
+                    <span
+                      className={`inline-flex h-3 w-3 shrink-0 items-center justify-center rounded-full border-2 ${
+                        chat.aiSource?.kind === 'peer'
+                          ? 'border-blue-500 bg-blue-500'
+                          : 'border-gray-300 bg-white'
+                      }`}
+                    >
+                      {chat.aiSource?.kind === 'peer' && (
+                        <span className='h-1.5 w-1.5 rounded-full bg-white' />
+                      )}
+                    </span>
+                    <span className='min-w-0 flex-1'>
+                      <span className='font-medium'>Host</span>
+                      <span className='ml-1 text-gray-500'>
+                        — {hostHasModel ? (hostState?.modelName ?? 'Model') : 'No model loaded'}
+                      </span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Settings button + popover ─────────────────────────── */}
+        <div className='relative'>
+          <button
+            type='button'
+            onClick={() => setShowSettings((v) => !v)}
+            aria-label='Settings'
+            title='AI settings'
+            className='inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-600 transition hover:bg-gray-50 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500'
+          >
+            <Settings className='h-3.5 w-3.5' />
+          </button>
+          {showSettings && (
+            <div className='absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-gray-200 bg-white shadow-lg'>
+              <div className='p-3'>
+                {/* Knowledge Base toggle */}
+                <div className='mb-3'>
+                  <div className='flex items-center justify-between'>
+                    <span className='text-xs font-medium text-gray-700'>Use Knowledge Base</span>
+                    <button
+                      type='button'
+                      disabled={chat.aiSource?.kind === 'peer'}
+                      onClick={() => {
+                        const newValue = !ai.config.knowledgeBase
+                        ai.setConfig({ ...ai.config, knowledgeBase: newValue })
+                        // Auto-load embedding model when KB is enabled
+                        if (newValue) {
+                          bridge.rag.model.load()
+                        }
+                      }}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                        chat.aiSource?.kind === 'peer'
+                          ? 'cursor-not-allowed opacity-50 bg-gray-200'
+                          : ai.config.knowledgeBase
+                            ? 'bg-blue-600'
+                            : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 rounded-full bg-white shadow transition ${
+                          ai.config.knowledgeBase && chat.aiSource?.kind !== 'peer'
+                            ? 'translate-x-4'
+                            : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  {chat.aiSource?.kind === 'peer' && (
+                    <p className='mt-1 text-[10px] text-amber-600'>
+                      ⚠️ Knowledge Base requires local AI source
+                    </p>
+                  )}
+                </div>
+
+                {/* Prompt-to-canvas toggle */}
+                <div className='mb-3'>
+                  <div className='flex items-center justify-between'>
+                    <span className='text-xs font-medium text-gray-700'>Prompt-to-Canvas</span>
+                    <button
+                      type='button'
+                      disabled={chat.aiSource?.kind === 'peer'}
+                      onClick={() => ai.setConfig({ ...ai.config, tools: !ai.config.tools })}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                        chat.aiSource?.kind === 'peer'
+                          ? 'cursor-not-allowed opacity-50 bg-gray-200'
+                          : ai.config.tools
+                            ? 'bg-blue-600'
+                            : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 rounded-full bg-white shadow transition ${
+                          ai.config.tools && chat.aiSource?.kind !== 'peer'
+                            ? 'translate-x-4'
+                            : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                  {chat.aiSource?.kind === 'peer' && (
+                    <p className='mt-1 text-[10px] text-amber-600'>
+                      ⚠️ Prompt-to-canvas requires local AI source
+                    </p>
+                  )}
+                </div>
+
+                {/* Tool toggles */}
+                {ai.config.tools && (
+                  <div className='mb-3'>
+                    <p className='mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500'>
+                      Tools
+                    </p>
+                    <div className='space-y-1.5'>
+                      {[
+                        { key: 'get_items', label: 'Get items', alwaysOn: true },
+                        { key: 'add_items', label: 'Add items' },
+                        { key: 'update_items', label: 'Update items' },
+                        { key: 'remove_items', label: 'Remove items' }
+                      ].map((tool) => (
+                        <div key={tool.key} className='flex items-center justify-between'>
+                          <span className='text-xs text-gray-700'>{tool.label}</span>
+                          <button
+                            type='button'
+                            disabled={tool.alwaysOn}
+                            onClick={() => {
+                              const tc = ai.config.toolConfig ?? {
+                                add_items: true,
+                                update_items: false,
+                                remove_items: true,
+                                get_items: true
+                              }
+                              ai.setConfig({
+                                ...ai.config,
+                                toolConfig: {
+                                  ...tc,
+                                  [tool.key]: !tc[tool.key as keyof typeof tc]
+                                }
+                              })
+                            }}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${
+                              (ai.config.toolConfig ?? DEFAULT_AI_CONFIG.toolConfig ?? {})[
+                                tool.key as keyof typeof ai.config.toolConfig
+                              ] === true
+                                ? 'bg-blue-600'
+                                : 'bg-gray-300'
+                            } ${tool.alwaysOn ? 'opacity-50 cursor-not-allowed' : ''}`}
+                          >
+                            <span
+                              className={`inline-block h-4 w-4 rounded-full bg-white shadow transition ${
+                                (ai.config.toolConfig ?? DEFAULT_AI_CONFIG.toolConfig ?? {})[
+                                  tool.key as keyof typeof ai.config.toolConfig
+                                ] === true
+                                  ? 'translate-x-4'
+                                  : 'translate-x-0.5'
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Divider */}
+                <div className='mb-3 border-t border-gray-200 pt-3'>
+                  <button
+                    type='button'
+                    onClick={() => {
+                      handleClear()
+                      setShowSettings(false)
+                    }}
+                    disabled={
+                      !currentSession || currentSession.messageCount === 0 || chat.isStreaming
+                    }
+                    className='w-full rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 disabled:text-gray-300'
+                  >
+                    Clear all messages
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Status hint (current source) ────────────────────────── */}
@@ -179,7 +447,6 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
             hasModel={ai.isReady}
             hasSource={!!chat.aiSource}
             sourceIsLocal={chat.aiSource?.kind === 'local'}
-            onSwitchToSetup={onSwitchToSetup}
           />
         ) : (
           <>
@@ -201,15 +468,6 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
               <span className='flex-1'>{chat.error.message}</span>
             </div>
             <div className='flex items-center gap-1.5'>
-              {isRelayErrorCode(chat.error.code) && onSwitchToSetup && (
-                <button
-                  type='button'
-                  onClick={onSwitchToSetup}
-                  className='inline-flex items-center gap-1 rounded-md border border-red-300 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-300'
-                >
-                  Switch source
-                </button>
-              )}
               <button
                 type='button'
                 onClick={() => chat.retry()}
@@ -241,7 +499,7 @@ export function AIChatTab({ onSwitchToSetup }: AIChatTabProps) {
             }
           }}
           placeholder={inputPlaceholder}
-          disabled={isInputDisabled} 
+          disabled={isInputDisabled}
           className='h-8 flex-1 resize-none rounded-md border border-gray-200 bg-white p-2 text-xs text-gray-800 focus:border-tamarind-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50'
         />
         {chat.isStreaming ? (
@@ -485,47 +743,27 @@ function StreamingBubble({ content, thinking }: { content: string; thinking: str
 function EmptyState({
   hasModel,
   hasSource,
-  sourceIsLocal,
-  onSwitchToSetup
+  sourceIsLocal
 }: {
   hasModel: boolean
   hasSource: boolean
   sourceIsLocal: boolean
-  onSwitchToSetup?: () => void
 }) {
   // Three distinct empty states:
-  //   1. No source at all — primary "Switch source" CTA points to
-  //      the Workspace tab. The user must pick either "This device"
-  //      (which requires a loaded model) or a peer with a loaded
-  //      model.
+  //   1. No source at all — prompt the user to pick a source above.
   //   2. Source is local but no model is loaded — guide the user
   //      through loading a model (via the AI model picker in the
-  //      footer) AND then picking "This device" in Workspace.
+  //      footer) and then picking "Local" in the source picker.
   //   3. Source is set and a model is loaded — generic "start a
   //      conversation" prompt.
   let body: React.ReactNode
   if (!hasSource) {
-    body = (
-      <>
-        <p className='text-[10px] text-gray-500'>
-          Pick an AI source in Workspace first.
-        </p>
-        {onSwitchToSetup && (
-          <button
-            type='button'
-            onClick={onSwitchToSetup}
-            className='mt-1 inline-flex items-center gap-1 rounded-md border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-blue-700 transition hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500'
-          >
-            Pick a source
-          </button>
-        )}
-      </>
-    )
+    body = <p className='text-[10px] text-gray-500'>Pick an AI source above to get started.</p>
   } else if (sourceIsLocal && !hasModel) {
     body = (
       <>
         <p className='text-[10px] text-gray-500'>
-          Your source is &ldquo;This device&rdquo; but no model is loaded.
+          Your source is &ldquo;Local&rdquo; but no model is loaded.
         </p>
         <p className='text-[10px] text-gray-500'>
           Open the AI model picker (footer) to load a model.
@@ -549,14 +787,6 @@ function EmptyState({
 
 // Codes that mean "the peer source is no longer reachable — pick a
 // new one". A local SEND_FAILED or completion error doesn't qualify:
-// the user might just want to Retry, not switch sources.
-const RELAY_ERROR_CODES = new Set(['MODEL_MISMATCH', 'RELAY_ERROR', 'ROUTE_FAILED', 'NO_SOURCE'])
-
-function isRelayErrorCode(code: string | undefined | null): boolean {
-  if (!code) return false
-  return RELAY_ERROR_CODES.has(code)
-}
-
 // Minimal markdown component map. No syntax highlighting, no math, no
 // link previews — keep the bundle lean. The full reference is
 // my-doctor-ai/src/renderer/src/pages/Chat.tsx:21-152; we ship the

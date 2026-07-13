@@ -24,6 +24,7 @@ interface GroupChatPanelProps {
   role: RoomRole | null
   writable: boolean
   me: { key: string; name: string } | null
+  identities?: Map<string, { displayName: string; updatedAt: number }>
   onSendChat: (text: string) => void
   onRemoveChat: (id: string) => void
   onClearChat: () => void
@@ -37,6 +38,7 @@ export function GroupChatPanel({
   role: _role,
   writable,
   me,
+  identities = new Map(),
   onSendChat,
   onRemoveChat,
   onClearChat
@@ -127,7 +129,10 @@ export function GroupChatPanel({
         ) : (
           messages.map((m) => {
             const isMe = me && m.info?.key === me.key
-            const label = isMe ? 'You' : (m.info?.name ?? m.info?.key?.slice(0, 6) ?? 'anonymous')
+            const identityName = m.info?.key ? identities?.get(m.info.key)?.displayName : undefined
+            const label = isMe
+              ? 'You'
+              : (identityName ?? m.info?.name ?? m.info?.key?.slice(0, 6) ?? 'anonymous')
             return (
               <div key={m.id} className='group flex flex-col gap-0.5'>
                 <div className='flex items-center justify-between'>

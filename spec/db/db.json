@@ -122,6 +122,36 @@
         "requestId"
       ],
       "trigger": null
+    },
+    {
+      "name": "identity",
+      "namespace": "tamarind",
+      "id": 8,
+      "type": 1,
+      "version": 1,
+      "versionField": null,
+      "indexes": [],
+      "schema": "@tamarind/identity",
+      "derived": false,
+      "key": [
+        "writerKey"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "media",
+      "namespace": "tamarind",
+      "id": 9,
+      "type": 1,
+      "version": 1,
+      "versionField": null,
+      "indexes": [],
+      "schema": "@tamarind/media",
+      "derived": false,
+      "key": [
+        "id"
+      ],
+      "trigger": null
     }
   ]
 }

@@ -100,6 +100,20 @@ contextBridge.exposeInMainWorld('bridge', {
       const handler = (_evt, p) => cb(p)
       ipcRenderer.on('ai:chat:status', handler)
       return () => ipcRenderer.removeListener('ai:chat:status', handler)
+    },
+    onToolCall: (cb) => {
+      const handler = (_evt, p) => cb(p)
+      ipcRenderer.on('ai:chat:toolCall', handler)
+      return () => ipcRenderer.removeListener('ai:chat:toolCall', handler)
+    },
+    onToolResult: (cb) => {
+      const handler = (_evt, p) => cb(p)
+      ipcRenderer.on('ai:chat:toolResult', handler)
+      return () => ipcRenderer.removeListener('ai:chat:toolResult', handler)
+    },
+    // Send tool result back to main process (fire-and-forget)
+    sendToolResult: (requestId, result) => {
+      ipcRenderer.send('chat:toolResult', { requestId, result })
     }
   },
   // Phase 6: file-based AI chat session store. NOT a P2P collection —
@@ -131,5 +145,21 @@ contextBridge.exposeInMainWorld('bridge', {
     const handler = (_evt, e) => cb(e)
     ipcRenderer.on('ai:chat:relay-event', handler)
     return () => ipcRenderer.removeListener('ai:chat:relay-event', handler)
+  },
+  rag: {
+    model: {
+      load: (args) => ipcRenderer.invoke('rag:model:load', args),
+      unload: () => ipcRenderer.invoke('rag:model:unload'),
+      status: () => ipcRenderer.invoke('rag:model:status')
+    },
+    ingest: (args) => ipcRenderer.invoke('rag:ingest', args),
+    search: (args) => ipcRenderer.invoke('rag:search', args),
+    list: () => ipcRenderer.invoke('rag:list'),
+    delete: (args) => ipcRenderer.invoke('rag:delete', args),
+    fetchUrl: (args) => ipcRenderer.invoke('rag:fetch-url', args),
+    predata: {
+      categories: () => ipcRenderer.invoke('rag:predata:categories'),
+      import: (args) => ipcRenderer.invoke('rag:predata:import', args)
+    }
   }
 })

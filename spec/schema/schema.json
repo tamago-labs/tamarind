@@ -199,6 +199,36 @@
           "version": 1
         },
         {
+          "name": "textAlign",
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "textAlignVertical",
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "videoUrl",
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "videoFileName",
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "videoMimeType",
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "videoSize",
+          "type": "int",
+          "version": 1
+        },
+        {
           "name": "order",
           "required": true,
           "type": "int",
@@ -569,6 +599,94 @@
         },
         {
           "name": "toKey",
+          "required": true,
+          "type": "buffer",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "name": "identity",
+      "namespace": "tamarind",
+      "compact": false,
+      "flagsPosition": -1,
+      "fields": [
+        {
+          "name": "writerKey",
+          "required": true,
+          "type": "buffer",
+          "version": 1
+        },
+        {
+          "name": "displayName",
+          "required": true,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "updatedAt",
+          "required": true,
+          "type": "int",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "name": "media",
+      "namespace": "tamarind",
+      "compact": false,
+      "flagsPosition": -1,
+      "fields": [
+        {
+          "name": "id",
+          "required": true,
+          "type": "buffer",
+          "version": 1
+        },
+        {
+          "name": "boardId",
+          "required": true,
+          "type": "buffer",
+          "version": 1
+        },
+        {
+          "name": "type",
+          "required": true,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "blob",
+          "required": true,
+          "type": "json",
+          "version": 1
+        },
+        {
+          "name": "fileName",
+          "required": true,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "mimeType",
+          "required": true,
+          "type": "string",
+          "version": 1
+        },
+        {
+          "name": "size",
+          "required": true,
+          "type": "int",
+          "version": 1
+        },
+        {
+          "name": "createdAt",
+          "required": true,
+          "type": "int",
+          "version": 1
+        },
+        {
+          "name": "createdBy",
           "required": true,
           "type": "buffer",
           "version": 1

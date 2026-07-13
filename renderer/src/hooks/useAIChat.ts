@@ -30,6 +30,9 @@
 
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { bridge } from '../lib/bridge'
+import { uid } from '../canvas/id'
+import { getActiveBoardId, getRoomSnapshot } from './useRoom'
+import { writeRoom } from '../lib/room'
 import type {
   AiSource,
   ChatDoneEvent,
@@ -139,6 +142,165 @@ function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+// Handle tool calls from the AI. Executes the tool against the canvas
+// and sends the result back to the main process for the AI to continue.
+async function handleToolCall(
+  requestId: string,
+  name: string,
+  args: Record<string, unknown>
+): Promise<void> {
+  try {
+    let result: Record<string, unknown> = { success: true }
+
+    if (name === 'get_items') {
+      // Return current items from the room snapshot
+      const snapshot = getRoomSnapshot()
+      const activeBoardId = getActiveBoardId()
+      const items =
+        snapshot?.items?.filter((i: Record<string, unknown>) => i.boardId === activeBoardId) ?? []
+      result = {
+        success: true,
+        count: items.length,
+        items: items.map((i: Record<string, unknown>) => ({
+          id: i.id,
+          type: i.type,
+          text: i.text || '',
+          x: Math.round(i.x as number),
+          y: Math.round(i.y as number)
+        })),
+        hint: 'Use the "id" field (hex string) when calling update_items'
+      }
+    } else if (name === 'add_items') {
+      // Execute add-items against the canvas worker
+      // AI sends partial items — fill in required fields with defaults
+      const rawItems = args.items as Array<Record<string, unknown>>
+      if (Array.isArray(rawItems) && rawItems.length > 0) {
+        const now = Date.now()
+        const activeBoardId = getActiveBoardId() ?? ''
+        const items = rawItems.map((raw) => {
+          const type = String(raw.type ?? 'rect')
+          // Helper to safely get string value, handling undefined, null, and string "undefined"
+          const safeStr = (val: unknown, fallback: string): string => {
+            if (val === undefined || val === null || val === 'undefined' || val === 'null') {
+              return fallback
+            }
+            const s = String(val).trim()
+            return s || fallback
+          }
+          const base = {
+            id: uid(),
+            boardId: activeBoardId,
+            type,
+            x: Number(raw.x) || 0,
+            y: Number(raw.y) || 0,
+            w: Number(raw.w) || 160,
+            h: Number(raw.h) || 100,
+            text: safeStr(raw.text, ''),
+            fill: safeStr(raw.fill, '#ffffff'),
+            stroke: safeStr(raw.stroke, '#000000'),
+            strokeWidth: Number(raw.strokeWidth) || 2,
+            fontSize: Number(raw.fontSize) || 12,
+            order: 0,
+            updatedAt: now
+          }
+          // Add connector-specific fields only for connector type
+          if (type === 'connector') {
+            return {
+              ...base,
+              start: { kind: 'free', x: Number(raw.startX) || 0, y: Number(raw.startY) || 0 },
+              end: { kind: 'free', x: Number(raw.endX) || 0, y: Number(raw.endY) || 0 },
+              arrowStart: 'none',
+              arrowEnd: 'arrow',
+              strokePattern: 'solid',
+              curve: 'straight',
+              label: raw.label ? { text: String(raw.label), at: 'middle' } : undefined
+            }
+          }
+          return base
+        })
+        await writeRoom({
+          type: 'state-action',
+          action: { type: 'add-items', items, at: now }
+        })
+        result = {
+          success: true,
+          count: items.length,
+          items: items.map((i) => ({
+            id: i.id,
+            type: i.type,
+            text: i.text || ''
+          })),
+          message: `Added ${items.length} shape(s). Use the "id" field to update.`
+        }
+      }
+    } else if (name === 'update_items') {
+      const updates = args.updates as Array<{ id: string; patch: Record<string, unknown> }>
+      console.log('[useAIChat] update_items received:', JSON.stringify(updates))
+      if (Array.isArray(updates)) {
+        for (const update of updates) {
+          console.log('[useAIChat] update-item patch:', JSON.stringify(update.patch))
+          await writeRoom({
+            type: 'state-action',
+            action: {
+              type: 'update-item',
+              id: update.id,
+              patch: update.patch,
+              at: Date.now()
+            }
+          })
+        }
+        result = {
+          success: true,
+          count: updates.length,
+          message: `Successfully updated ${updates.length} shape(s)`
+        }
+      }
+    } else if (name === 'remove_items') {
+      const ids = args.ids as string[]
+      if (Array.isArray(ids)) {
+        await writeRoom({
+          type: 'state-action',
+          action: { type: 'remove-items', ids }
+        })
+        result = {
+          success: true,
+          count: ids.length,
+          message: `Successfully removed ${ids.length} shape(s) from the canvas`
+        }
+      }
+    } else if (name === 'search_knowledge_base') {
+      const query = args.query as string
+      const topK = (args.top_k as number) ?? 5
+      const searchResult = await bridge.rag.search({ query, topK })
+
+      if (searchResult.success && searchResult.results) {
+        result = {
+          success: true,
+          count: searchResult.results.length,
+          results: searchResult.results.map((r) => ({
+            content: r.content,
+            score: r.score
+          }))
+        }
+      } else {
+        result = { success: false, error: searchResult.error || 'Search failed' }
+      }
+    } else {
+      result = { success: false, error: `Unknown tool: ${name}` }
+    }
+
+    // Send result back to main process via fire-and-forget event
+    // (not invoke — the main process is waiting on an ipcMain.on listener)
+    bridge.aiChat.sendToolResult(requestId, result)
+  } catch (err) {
+    console.error('[useAIChat] Tool execution failed:', err)
+    bridge.aiChat.sendToolResult(requestId, {
+      success: false,
+      error: err instanceof Error ? err.message : 'Tool execution failed'
+    })
+  }
+}
+
 async function refreshSessions() {
   try {
     const list = await bridge.sessions.list()
@@ -196,7 +358,12 @@ async function bootstrapOnce() {
   // `onError` and cleared only after the assistant message is
   // committed to `messages`.
   bridge.aiChat.onStatus((e: ChatStatusEvent) => {
-    set({ isStreaming: e.isStreaming })
+    // Update streamingRequestId when a new completion starts (agentic loop)
+    // This ensures tokens from subsequent completions are accepted
+    set({
+      isStreaming: e.isStreaming,
+      ...(e.requestId ? { streamingRequestId: e.requestId } : {})
+    })
   })
   bridge.aiChat.onToken((e: ChatTokenEvent) => {
     if (snapshot.streamingRequestId !== null && e.requestId !== snapshot.streamingRequestId) {
@@ -354,6 +521,17 @@ async function bootstrapOnce() {
       cancelRelayWatchdog()
     }
   })
+
+  // Canvas tool calling — when the AI wants to modify the canvas,
+  // the main process forwards the tool call to us. We execute the
+  // tool against the canvas via useRoom.sendAction and send the
+  // result back to the main process for the AI to continue.
+  bridge.aiChat.onToolCall(
+    (e: { requestId: string; name: string; args: Record<string, unknown> }) => {
+      console.log('[useAIChat] Tool call received:', e.name, e.args)
+      handleToolCall(e.requestId, e.name, e.args)
+    }
+  )
 
   // Hydrate initial sessions list + pinned `main`. The `aiSource`
   // starts as `null` — the user must pick a source (local or a peer)

@@ -2,8 +2,8 @@
 // Renders two layers above the rendered shapes but below the selection
 // overlay:
 //
-//   1. ConnectorPorts — small dots at the 5 ports of the shape under
-//      the cursor (and a highlighted dot at the nearest snap target).
+//   1. ConnectorPorts — small dots at the 4 ports of every shape
+//      when the connector tool is active (subtle opacity, full on hover).
 //   2. DraftConnectorPreview — the ghost line + cursor dot for the
 //      connector being drawn (only present between pointerdown and
 //      pointerup).
@@ -29,7 +29,7 @@ import type { BoardScopedItem, Port } from './types'
 import { getPortWorld } from './types'
 import type { NearestPort } from './findPort'
 
-const PORTS: Port[] = ['top', 'right', 'bottom', 'left', 'center']
+const PORTS: Port[] = ['top', 'right', 'bottom', 'left']
 
 // 20k × 20k mirror of `CanvasItems` so the world coordinates that
 // `DraftConnectorPreview` and `PortsForShape` emit align with the
@@ -55,17 +55,18 @@ export interface DraftConnector {
 }
 
 export interface CanvasOverlayProps {
-  // When the connector tool is armed, show ports on the shape under the
-  // cursor. The shape id is provided by CanvasPage (it does the hit-test
-  // on each pointermove so this component stays dumb).
+  // When the connector tool is armed, show ports on all shapes.
   showPorts: boolean
-  hoverShape: BoardScopedItem | null
+  // All items for rendering ports on every shape
+  items: BoardScopedItem[]
+  // Currently hovered shape (for highlight effect)
+  hoverShapeId: string | null
   zoom: number
   // The in-flight connector. null when the user isn't currently drawing.
   draft: DraftConnector | null
 }
 
-export function CanvasOverlay({ showPorts, hoverShape, zoom, draft }: CanvasOverlayProps) {
+export function CanvasOverlay({ showPorts, items, hoverShapeId, zoom, draft }: CanvasOverlayProps) {
   if (!showPorts && !draft) return null
   return (
     <svg style={svgStyle} xmlns='http://www.w3.org/2000/svg'>
@@ -87,9 +88,18 @@ export function CanvasOverlay({ showPorts, hoverShape, zoom, draft }: CanvasOver
         </marker>
       </defs>
       <g transform={`translate(${WORLD_HALF} ${WORLD_HALF})`}>
-        {showPorts && hoverShape && (
-          <PortsForShape item={hoverShape} zoom={zoom} snap={draft?.endSnap ?? null} />
-        )}
+        {showPorts &&
+          items
+            .filter((item) => item.type !== 'connector')
+            .map((item) => (
+              <PortsForShape
+                key={item.id}
+                item={item}
+                zoom={zoom}
+                snap={draft?.endSnap ?? null}
+                isHovered={item.id === hoverShapeId}
+              />
+            ))}
         {draft && <DraftConnectorPreview draft={draft} />}
       </g>
     </svg>
@@ -99,11 +109,13 @@ export function CanvasOverlay({ showPorts, hoverShape, zoom, draft }: CanvasOver
 function PortsForShape({
   item,
   zoom,
-  snap
+  snap,
+  isHovered
 }: {
   item: BoardScopedItem
   zoom: number
   snap: NearestPort | null
+  isHovered: boolean
 }) {
   if (item.w === undefined || item.h === undefined) return null
   // `vectorEffect='non-scaling-stroke'` keeps the dot stroke at 1.5
@@ -111,10 +123,12 @@ function PortsForShape({
   // so it scales with the shape (matches the rest of the world-space
   // visual language); the snap target stays at the same world radius
   // but reads larger because the surrounding context shrinks.
-  const r = 4 / zoom
-  const rSnap = 6 / zoom
+  const r = 5 / zoom
+  const rSnap = 7 / zoom
+  // Subtle opacity when not hovered, full when hovered or snapped
+  const opacity = isHovered ? 1 : 0.5
   return (
-    <g>
+    <g opacity={opacity}>
       {PORTS.map((port) => {
         const p = getPortWorld(item, port)
         const isSnap = snap !== null && snap.itemId === item.id && snap.port === port

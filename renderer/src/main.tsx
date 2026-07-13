@@ -5,7 +5,7 @@ import { __tamarindRoomStoreForTest, dispatchActionForTest } from './hooks/useRo
 import './index.css'
 
 const root = document.getElementById('root')
-if (!root)
+if (!root) {
   throw new Error('Root element not found')
 
   // Test hook — exposes the room store snapshot to CDP-driven smoke
@@ -15,6 +15,7 @@ if (!root)
   // (e.g. to verify the worker-side last-board guard fires when the UI
   // hides the delete button). Safe in production (read-only peek;
   // dispatch only writes the same way the React hook does).
+}
 ;(window as unknown as { __tamarind?: unknown }).__tamarind = {
   room: {
     ...__tamarindRoomStoreForTest(),

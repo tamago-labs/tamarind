@@ -308,6 +308,27 @@ class TamarindRoom extends ReadyResource {
         this.onRelayCancel(data)
       }
     })
+
+    // Phase 4: Portable identity. Upsert by writerKey.
+    this.router.add('@tamarind/update-identity', async (data, context) => {
+      const writerKey = b4a.isBuffer(data.writerKey) ? data.writerKey : b4a.from(data.writerKey)
+      const next = {
+        writerKey,
+        displayName: data.displayName,
+        updatedAt: data.updatedAt ?? Date.now()
+      }
+      const existing = await context.view.get('@tamarind/identity', { writerKey })
+      if (existing) {
+        await applyUpdate(context.view, '@tamarind/identity', { writerKey }, () => next)
+      } else {
+        await context.view.insert('@tamarind/identity', next)
+      }
+    })
+
+    // Phase 4: Media references.
+    this.router.add('@tamarind/add-media', async (data, context) => {
+      await context.view.insert('@tamarind/media', data)
+    })
   }
 
   get view() {
@@ -456,6 +477,58 @@ class TamarindRoom extends ReadyResource {
   // route that any other peer would emit.
   async appendRemoveChats(ids) {
     await this.base.append(TamarindDispatch.encode('@tamarind/remove-chats', { ids: ids.slice() }))
+  }
+
+  // Phase 4: Portable identity. Append the local writer's identity
+  // to the Autobase so remote peers can resolve writer keys to display names.
+  async appendIdentity({ displayName }) {
+    await this.base.append(
+      TamarindDispatch.encode('@tamarind/update-identity', {
+        writerKey: this.localBase.key,
+        displayName,
+        updatedAt: Date.now()
+      })
+    )
+  }
+
+  // Phase 4: Read all identity rows. Returns array of
+  // {writerKey, displayName, updatedAt}.
+  async getIdentities() {
+    const rows = await this.view.find('@tamarind/identity', {}).toArray()
+    return rows.map((r) => ({
+      writerKey: b4a.toString(r.writerKey, 'hex'),
+      displayName: r.displayName,
+      updatedAt: r.updatedAt
+    }))
+  }
+
+  // Phase 4: Media methods. Store video file references in the Autobase.
+  async addMedia({ boardId, type, blob, fileName, mimeType, size }) {
+    const id = b4a.from(Math.random().toString(16).slice(2), 'hex')
+    await this.base.append(
+      TamarindDispatch.encode('@tamarind/add-media', {
+        id,
+        boardId: hexId(boardId),
+        type,
+        blob,
+        fileName,
+        mimeType,
+        size,
+        createdAt: Date.now(),
+        createdBy: this.localBase.key
+      })
+    )
+    return id
+  }
+
+  // Phase 4: Read all media rows for a board.
+  async getMedia({ boardId }) {
+    const all = await this.view.find('@tamarind/media', {}).toArray()
+    if (boardId) {
+      const boardIdBuf = hexId(boardId)
+      return all.filter((m) => b4a.equals(m.boardId, boardIdBuf))
+    }
+    return all
   }
 
   // Dispatch a single board action through the encoded route. Each
@@ -626,6 +699,13 @@ function encodeItem(it) {
   if (it.strokePattern !== undefined) encoded.strokePattern = it.strokePattern
   if (it.curve !== undefined) encoded.curve = it.curve
   if (it.label !== undefined) encoded.label = JSON.stringify(it.label)
+  if (it.textAlign !== undefined) encoded.textAlign = it.textAlign
+  if (it.textAlignVertical !== undefined) encoded.textAlignVertical = it.textAlignVertical
+  // Phase 4 video fields
+  if (it.videoUrl !== undefined) encoded.videoUrl = it.videoUrl
+  if (it.videoFileName !== undefined) encoded.videoFileName = it.videoFileName
+  if (it.videoMimeType !== undefined) encoded.videoMimeType = it.videoMimeType
+  if (it.videoSize !== undefined) encoded.videoSize = it.videoSize
   return encoded
 }
 
@@ -665,8 +745,9 @@ function decodeItem(raw) {
   }
   if (raw.arrowStart !== undefined && raw.arrowStart !== null) item.arrowStart = raw.arrowStart
   if (raw.arrowEnd !== undefined && raw.arrowEnd !== null) item.arrowEnd = raw.arrowEnd
-  if (raw.strokePattern !== undefined && raw.strokePattern !== null)
+  if (raw.strokePattern !== undefined && raw.strokePattern !== null) {
     item.strokePattern = raw.strokePattern
+  }
   if (raw.curve !== undefined && raw.curve !== null) item.curve = raw.curve
   if (raw.label !== undefined && raw.label !== null) {
     try {
@@ -675,6 +756,19 @@ function decodeItem(raw) {
       item.label = undefined
     }
   }
+  if (raw.textAlign !== undefined && raw.textAlign !== null) item.textAlign = raw.textAlign
+  if (raw.textAlignVertical !== undefined && raw.textAlignVertical !== null) {
+    item.textAlignVertical = raw.textAlignVertical
+  }
+  // Phase 4 video fields
+  if (raw.videoUrl !== undefined && raw.videoUrl !== null) item.videoUrl = raw.videoUrl
+  if (raw.videoFileName !== undefined && raw.videoFileName !== null) {
+    item.videoFileName = raw.videoFileName
+  }
+  if (raw.videoMimeType !== undefined && raw.videoMimeType !== null) {
+    item.videoMimeType = raw.videoMimeType
+  }
+  if (raw.videoSize !== undefined && raw.videoSize !== null) item.videoSize = raw.videoSize
   return item
 }
 
