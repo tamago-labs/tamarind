@@ -60,7 +60,7 @@ The guest uses a separate local storage directory so it behaves as an independen
 ### 5. Try Local AI
 
 1. Click the **AI** status pill in the footer.
-2. Select **Qwen3-1.7B** or **Qwen3-4B** to download and load through **QVAC**, or import your own custom **GGUF** model.
+2. Select **Qwen 1.7B**, **Qwen 4B**, **Gemma 4B**, or **Gemma 31B** to download and load through **QVAC**, or import your own custom **GGUF** model.
 3. Open the **AI Chat** tab.
 4. Choose either:
    - **Local** — use the model loaded on your device.
@@ -86,11 +86,6 @@ The canvas is designed for tactical planning rather than generic diagramming, wi
 - Rich editing tools including drag, resize, marquee selection, z-order, per-object styling, and connector configuration.
 - Deterministic connector attachment that automatically follows connected shapes during movement and safely orphans connectors when shapes are removed.
 - High-frequency local rendering during drag operations with commit-on-release replication, reducing unnecessary network traffic.
-- SVG and PNG export with selection-aware rendering, plus board backup and restore.
-- Persistent display names across sessions and peers (Identity).
-- Video upload and display on the canvas (50MB limit).
-- **Prompt-to-Canvas** — AI can create shapes on the canvas from chat prompts.
-- **Knowledge Base** — RAG-powered document search for instant access to stored information.
 
 ### Multi-Board Workspace
 
@@ -104,8 +99,7 @@ A single Tamarind workspace can contain multiple tactical boards.
 
 Built entirely on the **Pear Runtime** ecosystem.
 
-- Peer discovery through **Hyperswarm** using invite codes.
-- **HyperDHT**-powered internet-wide P2P connectivity across corporate networks, mobile networks, and public internet.
+- **HyperDHT**-powered peer discovery through **Hyperswarm** with invite codes for internet-wide P2P connectivity.
 - Multi-writer synchronization powered by **Autobase** with **HyperDB** replicated views.
 - Encrypted replicated collections for boards, canvas items, chat, invitations, and AI state.
 - Every reducer action is replicated as an append-only operation, allowing new peers to replay history and converge deterministically.
@@ -118,8 +112,7 @@ Built entirely on the **Pear Runtime** ecosystem.
 Communication is integrated directly into the workspace.
 
 - Built-in group chat with persistent replicated history.
-- Stable writer identities backed by persistent Hypercore keypairs.
-- Editable display names while preserving cryptographic peer identity.
+- Stable writer identities backed by persistent Hypercore keypairs with editable display names.
 - Invite-code onboarding without requiring accounts or cloud services.
 
 ### Local AI with QVAC
@@ -175,22 +168,22 @@ Additional capabilities planned:
 
 | Feature | Description | Integration | Key Files |
 |---------|-------------|-------------|-----------|
-| **Shared Canvas** | Multi-board workspace with 6 shape types (rect, ellipse, text, note, connector, video) | None | `renderer/src/canvas/canvasReducer.ts`, `renderer/src/canvas/CanvasItems.tsx` |
-| **P2P Sync** | Autobase multi-writer log with HyperDB replicated state | Pears | `workers/tamarind-room.js`, `schema.js` |
-| **Invite Codes** | BlindPairing-based invite system for secure peer onboarding | Pears | `workers/tamarind-room.js`, `renderer/src/components/InviteJoinModal.tsx` |
-| **HyperDHT** | Hyperswarm-powered internet-wide peer discovery | Pears | `workers/tamarind-room-entry.js` |
-| **Identity** | Persistent display names via writer keypair + rename-self | Pears | `renderer/src/hooks/useRoom.ts`, `renderer/src/components/NameEditModal.tsx` |
-| **Local AI** | QVAC SDK integration with Qwen3-1.7B, Qwen3-4B, Gemma4-4B, Gemma4-31B | QVAC | `electron/qvac.js`, `electron/aiChat.js` |
-| **RAG** | Knowledge Base with GTE Large FP16 embeddings for semantic search | QVAC | `electron/ragStore.js`, `renderer/src/components/KnowledgeBaseModal.tsx` |
-| **Prompt-to-Canvas** | AI tool calling to create/update/remove shapes from chat | QVAC + Pears | `renderer/src/ai/tools.ts`, `electron/canvasTools.js` |
-| **AI Relay** | P2P relay for using peer's loaded model without local download | Pears + QVAC | `electron/aiChat.js`, `workers/tamarind-room.js` |
-| **Video Upload** | Hyperblobs-based video storage with blob server streaming | Pears | `workers/tamarind-room-entry.js`, `renderer/src/canvas/VideoShape.tsx` |
-| **Sticky Notes** | First-class note shape with folded corner effect | None | `renderer/src/canvas/shapes/NoteShape.tsx` |
-| **Multi-Board** | Board CRUD with last-board protection and cascade delete | None | `renderer/src/canvas/canvasReducer.ts`, `renderer/src/components/BoardsMenu.tsx` |
-| **Templates** | 23 templates across 7 categories (Sports, Marketing, Product, etc.) | None | `renderer/src/data/templates.ts`, `renderer/src/components/TemplatesModal.tsx` |
-| **Group Chat** | P2P persistent chat with writer identity resolution | Pears | `renderer/src/components/GroupChatPanel.tsx`, `workers/tamarind-room.js` |
-| **Export SVG/PNG** | Selection-aware canvas export to SVG or PNG | None | `renderer/src/canvas/svgExport.ts`, `renderer/src/components/ExportMenu.tsx` |
-| **Board Backup/Restore** | Single-board backup file with restore capability | None | `renderer/src/data/boardIO.ts`, `renderer/src/components/CanvasPage.tsx` |
+| **Shared Canvas** | Multi-board workspace with 6 shape types (rect, ellipse, text, note, connector, video) | None | [`canvasReducer.ts`](renderer/src/canvas/canvasReducer.ts), [`CanvasItems.tsx`](renderer/src/canvas/CanvasItems.tsx) |
+| **P2P Sync** | Autobase multi-writer log with HyperDB replicated state | Pears | [`tamarind-room.js`](workers/tamarind-room.js), [`schema.js`](schema.js) |
+| **Invite Codes** | BlindPairing-based invite system for secure peer onboarding | Pears | [`tamarind-room.js`](workers/tamarind-room.js), [`InviteJoinModal.tsx`](renderer/src/components/InviteJoinModal.tsx) |
+| **HyperDHT** | Hyperswarm-powered internet-wide peer discovery | Pears | [`tamarind-room-entry.js`](workers/tamarind-room-entry.js) |
+| **Identity** | Persistent display names via writer keypair + rename-self | Pears | [`useRoom.ts`](renderer/src/hooks/useRoom.ts), [`NameEditModal.tsx`](renderer/src/components/NameEditModal.tsx) |
+| **Local AI** | QVAC SDK integration with Qwen3-1.7B, Qwen3-4B, Gemma4-4B, Gemma4-31B | QVAC | [`qvac.js`](electron/qvac.js), [`aiChat.js`](electron/aiChat.js) |
+| **RAG** | Knowledge Base with GTE Large FP16 embeddings for semantic search | QVAC | [`ragStore.js`](electron/ragStore.js), [`KnowledgeBaseModal.tsx`](renderer/src/components/KnowledgeBaseModal.tsx) |
+| **Prompt-to-Canvas** | AI tool calling to create/update/remove shapes from chat | QVAC + Pears | [`tools.ts`](renderer/src/ai/tools.ts), [`canvasTools.js`](electron/canvasTools.js) |
+| **AI Relay** | P2P relay for using peer's loaded model without local download | Pears + QVAC | [`aiChat.js`](electron/aiChat.js), [`tamarind-room.js`](workers/tamarind-room.js) |
+| **Video Upload** | Hyperblobs-based video storage with blob server streaming | Pears | [`tamarind-room-entry.js`](workers/tamarind-room-entry.js), [`VideoShape.tsx`](renderer/src/canvas/VideoShape.tsx) |
+| **Sticky Notes** | First-class note shape with folded corner effect | None | [`NoteShape.tsx`](renderer/src/canvas/shapes/NoteShape.tsx) |
+| **Multi-Board** | Board CRUD with last-board protection and cascade delete | None | [`canvasReducer.ts`](renderer/src/canvas/canvasReducer.ts), [`BoardsMenu.tsx`](renderer/src/components/BoardsMenu.tsx) |
+| **Templates** | 23 templates across 7 categories (Sports, Marketing, Product, etc.) | None | [`templates.ts`](renderer/src/data/templates.ts), [`TemplatesModal.tsx`](renderer/src/components/TemplatesModal.tsx) |
+| **Group Chat** | P2P persistent chat with writer identity resolution | Pears | [`GroupChatPanel.tsx`](renderer/src/components/GroupChatPanel.tsx), [`tamarind-room.js`](workers/tamarind-room.js) |
+| **Export SVG/PNG** | Selection-aware canvas export to SVG or PNG | None | [`svgExport.ts`](renderer/src/canvas/svgExport.ts), [`ExportMenu.tsx`](renderer/src/components/ExportMenu.tsx) |
+| **Board Backup/Restore** | Single-board backup file with restore capability | None | [`boardIO.ts`](renderer/src/data/boardIO.ts), [`CanvasPage.tsx`](renderer/src/components/CanvasPage.tsx) |
 
 **Integration Key:** **Pears** = Holepunch stack (Hypercore, Autobase, HyperDB, Hyperswarm, Corestore) • **QVAC** = Local AI runtime (llama.cpp, Qwen3, Gemma4 models) • **None** = Pure frontend (React/TypeScript) • **Pears + QVAC** = Feature uses both stacks
 
