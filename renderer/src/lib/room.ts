@@ -1,6 +1,4 @@
 // Room worker IPC helpers. Wraps `bridge.writeWorkerIPC(ROOM_WORKER, …)`
-// with JSON framing for the protocol documented in
-// `C:\Users\pisut\.claude\plans\nested-beaming-reef.md`.
 //
 // The `ROOM_WORKER` specifier is set by `electron/main.js`'s
 // `getWorker()` factory; calling `bridge.startWorker(ROOM_WORKER)` is

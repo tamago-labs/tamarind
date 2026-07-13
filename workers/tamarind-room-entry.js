@@ -7,8 +7,7 @@
 //   • Identity (writer key + display name → identity.json on disk)
 //   • IPC pipe (FramedStream over Bare.IPC → framed JSON to renderer)
 //
-// Renderer-side counterpart: `renderer/src/hooks/useRoom.ts`. Wire
-// protocol documented in `C:\Users\pisut\.claude\plans\nested-beaming-reef.md`.
+// Renderer-side counterpart: `renderer/src/hooks/useRoom.ts`. 
 
 const Autobase = require('autobase')
 const b4a = require('b4a')

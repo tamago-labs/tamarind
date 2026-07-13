@@ -5,11 +5,7 @@
 // surface so each reducer dispatch becomes a single Autobase append,
 // and the full log replays into the reducer's `snapshot` action when
 // a peer joins.
-//
-// v1 shortcut: connector endpoints (`start`, `end`) are encoded as
-// opaque JSON strings to dodge a v1 hyperschema any-of restriction.
-// A new peer reads them back via `JSON.parse` in the worker's
-// snapshot path. See `nested-beaming-reef.md` step 11.
+
 
 const Hyperschema = require('hyperschema')
 const HyperdbBuilder = require('hyperdb/builder')
@@ -213,7 +209,7 @@ schema.register({
   ]
 })
 
-// Phase 3: P2P completion routing. A requester encodes a chat-completion
+// P2P completion routing. A requester encodes a chat-completion
 // payload and pins it at the owner's writer key. The owner runs the
 // local inference and streams the result back as a sequence of
 // `relay-response` records with the same `requestId`. We do NOT
@@ -252,7 +248,7 @@ schema.register({
   ]
 })
 
-// Phase 4: Portable identity. One row per writer key; the worker
+// Portable identity. One row per writer key; the worker
 // upserts this whenever the local writer's display name changes.
 // Remote peers can resolve writer keys to display names.
 schema.register({
@@ -264,7 +260,7 @@ schema.register({
   ]
 })
 
-// Phase 4: Media references. Video files stored in Hyperdrive,
+// Media references. Video files stored in Hyperdrive,
 // metadata replicated via Autobase.
 schema.register({
   name: 'media',
@@ -340,15 +336,13 @@ db.collections.register({
   schema: '@tamarind/relay-cancel',
   key: ['requestId']
 })
-
-// Phase 4: Portable identity. One row per writer key.
+ 
 db.collections.register({
   name: 'identity',
   schema: '@tamarind/identity',
   key: ['writerKey']
 })
-
-// Phase 4: Media references. Video files stored in Hyperdrive.
+ 
 db.collections.register({
   name: 'media',
   schema: '@tamarind/media',
@@ -378,16 +372,12 @@ dispatch.register({ name: 'remove-items', requestType: '@tamarind/items-remove' 
 
 dispatch.register({ name: 'add-chat', requestType: '@tamarind/chat-msg' })
 dispatch.register({ name: 'remove-chats', requestType: '@tamarind/chats-remove' })
-
-// Phase 2 + 3 routes. The worker reads the local AI state via
-// `getLocalAiStateSnapshot()` and stamps the writer key + fields
-// when the request lands.
+ 
 dispatch.register({ name: 'update-ai-state', requestType: '@tamarind/ai-state-update' })
 dispatch.register({ name: 'relay-request', requestType: '@tamarind/relay-request' })
 dispatch.register({ name: 'relay-response', requestType: '@tamarind/relay-response' })
 dispatch.register({ name: 'relay-cancel', requestType: '@tamarind/relay-cancel' })
-
-// Phase 4 routes. Identity and media.
+ 
 dispatch.register({ name: 'update-identity', requestType: '@tamarind/identity' })
 dispatch.register({ name: 'add-media', requestType: '@tamarind/media' })
 
